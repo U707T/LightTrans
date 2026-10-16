@@ -1,0 +1,39 @@
+# 更新日志
+
+## v3.1
+- 删掉悬浮球全套（`SYSTEM_ALERT_WINDOW` / 前台服务 / 通知权限），回到**只有 `INTERNET`** 的零权限版本。
+- 入口：选中菜单 + 分享 + `ACTION_TRANSLATE`（浏览器/系统的翻译图标位）。
+
+## v3.0
+- 修复：从后台触发时会把轻译主界面一并拽到前台 —— 给卡片加了独立 `taskAffinity="com.Lighttrans.peek"`（与欧路词典的 `LightpeekActivity` 同款做法）。
+- 新增**多引擎对比**：设置页总开关 + 每个引擎「参与对比」勾选；选中翻译时多家并行请求，结果分块显示，可整体复制。
+
+## v2.9
+- 新增 `android.intent.action.TRANSLATE` 入口 —— 这是欧路词典"置顶图标"的真正实现方式，注册后浏览器/系统会把本应用显示为"翻译"图标。
+
+## v2.8
+- 自检支持一键复制（点文字 / 「复制全部」），列表带编号并显示"排第 N 位 / 共 M 个"。
+
+## v2.7
+- 包名改为 `com.Lighttrans.app`：系统"选中菜单"按包名 ASCII 升序排列，大写 `L` 让本应用从第 8 位升到第 2 位（仅次于系统 TalkBack）。
+
+## v2.6
+- 试验 `intent-filter android:priority`（无效，保留）。
+
+## v2.5
+- 默认供应商改为「皮皮」(`deepseek-v4.1-flash`)；接口地址支持填基地址（自动补全 `/chat/completions`）。
+
+## v2.4
+- 图标改为项目内置 `ic_launcher.svg` 的真矢量实现（`ic_launcher_vec.xml` + 自适应图标 + 5 档 PNG 均由该 SVG 生成）。
+
+## v2.0 ~ v2.3
+- 新增悬浮球（`SYSTEM_ALERT_WINDOW`），悬浮球直接显示应用图标本体；图标换成多密度 PNG + 自适应图标。
+
+## v1.2 ~ v1.5
+- 拉取模型列表 / 选择模型 / 逐引擎测试；预设精简为一个 OpenAI；菜单里显示名改为「轻译」。
+
+## v1.1
+- 新增「分享」入口（`ACTION_SEND`）与「自检：菜单支持情况」。
+
+## v1.0
+- 首个版本：`ACTION_PROCESS_TEXT` 选中即译，半透明对话框卡片，零权限。

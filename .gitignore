@@ -1,0 +1,12 @@
+# 构建产物
+build/
+dist/
+*.apk
+*.idsig
+*.keystore
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+*.iml
+.DS_Store

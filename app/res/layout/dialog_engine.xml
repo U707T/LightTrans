@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="名称"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/edName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="例如 DeepSeek"
+            android:inputType="text"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="提供方类型"
+            android:textSize="13sp" />
+
+        <Spinner
+            android:id="@+id/spType"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="接口地址（…/v1 或 …/chat/completions 都行）"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/edUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="https://ai.pipiwangcom.com/v1"
+            android:inputType="textUri"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="模型名（也可以点右侧按钮在线拉取）"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btnFetchModels"
+                style="?android:attr/buttonStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="拉取模型" />
+        </LinearLayout>
+
+        <EditText
+            android:id="@+id/edModel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="deepseek-chat"
+            android:inputType="text"
+            android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="API Key"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/edKey"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="本地服务(Ollama 等)可留空"
+            android:inputType="textVisiblePassword"
+            android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:textColor="#888888"
+            android:textSize="11sp"
+            android:text="※ 只要对方提供 OpenAI 兼容接口，就能加进来(DeepSeek / 智谱 / 通义 / Kimi / 豆包 / 硅基流动 / Ollama 本地 …)。\n※ Gemini 类型：模型名会替换进 URL 的 %s 占位符，Key 以 ?key= 追加。\n※ Key 仅保存在本机。" />
+    </LinearLayout>
+</ScrollView>

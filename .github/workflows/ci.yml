@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK (platform-36 + build-tools 36.0.0)
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0'
+
+      - name: 读取版本号
+        id: ver
+        run: |
+          V=$(grep -oP 'android:versionName="\K[^"]+' app/AndroidManifest.xml)
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: 构建 APK
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: 校验产物（权限只剩 INTERNET / 入口齐全）
+        run: |
+          AAPT=$ANDROID_HOME/build-tools/36.0.0/aapt2
+          $AAPT dump badging dist/*.apk | tee badging.txt
+          grep -q "uses-permission: name='android.permission.INTERNET'" badging.txt
+          if grep -q "SYSTEM_ALERT_WINDOW" badging.txt; then echo "不应出现悬浮窗权限"; exit 1; fi
+          $AAPT dump xmltree --file AndroidManifest.xml dist/*.apk | grep -q "android.intent.action.TRANSLATE"
+          $AAPT dump xmltree --file AndroidManifest.xml dist/*.apk | grep -q "android.intent.action.PROCESS_TEXT"
+
+      - name: 生成 Release 说明（取 CHANGELOG 顶部一段）
+        run: awk '/^## /{n++} n==1{print} n>=2{exit}' CHANGELOG.md > RELEASE_NOTES.md || true
+
+      - name: 发布 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: 轻译 v${{ steps.ver.outputs.version }}
+          body_path: RELEASE_NOTES.md
+          prerelease: ${{ contains(steps.ver.outputs.version, '-rc') }}
+          files: dist/*.apk

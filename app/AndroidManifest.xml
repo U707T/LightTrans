@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.Lighttrans.app"
+    android:versionCode="18"
+    android:versionName="3.1">
+
+    <!-- 只需要联网(普通权限，安装即授予，不会弹窗)。
+         不需要悬浮窗(SYSTEM_ALERT_WINDOW)、无障碍、通知、后台服务等任何敏感权限。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+
+    <!-- 只是为了让设置页里的“自检”能列出系统里的选中菜单/分享菜单提供方，不影响别的东西 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.LightTrans.Main">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- “悬浮窗”本体：由系统的文本选择菜单以对话框形式启动，叠加在被选中文本的应用之上。
+             因为它是一个 Activity，所以整个过程不需要任何权限。 -->
+        <activity
+            android:name=".ProcessTextActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/process_label"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:taskAffinity="com.Lighttrans.peek"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize"
+            android:theme="@style/Theme.LightTrans.Float">
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <!-- 兼容声明：个别 ROM/输入法查询选中菜单时不带 MIME 类型，只带 mimeType 的过滤器会被漏掉 -->
+            <intent-filter android:priority="999">
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <!-- 浏览器 / 系统（如 HyperOS 的划词翻译）会查询 ACTION_TRANSLATE 来显示“翻译”入口，
+                 欧路词典的置顶图标就是靠这个 action（它的 LightpeekActivity 里注册了 TRANSLATE）。
+                 这里带上/不带 mimeType 各注册一份，兼容不同调用方式。 -->
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.TRANSLATE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter android:priority="999">
+                <action android:name="android.intent.action.TRANSLATE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <!-- 备选入口：选中文字 → 分享 → AI 翻译（有些 App 的选择菜单不显示第三方项，但一定有“分享”） -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

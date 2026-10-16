@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.LightTrans.Main" parent="@android:style/Theme.DeviceDefault.Light">
+        <item name="android:windowBackground">#FFF7F8FA</item>
+    </style>
+
+    <!-- 悬浮卡片主题：透明、无标题、不遮暗背景、点外部关闭 -->
+    <style name="Theme.LightTrans.Float" parent="@android:style/Theme.DeviceDefault.Dialog">
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+        <item name="android:windowMinWidthMajor">92%</item>
+        <item name="android:windowMinWidthMinor">92%</item>
+    </style>
+</resources>

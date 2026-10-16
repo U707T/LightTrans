@@ -1,0 +1,137 @@
+# 轻译 · 选中即译（Android 16 友好 / 零权限）
+
+一个“看起来像悬浮窗、实际上不需要任何权限”的 AI 翻译小工具。
+
+**用法**：在任意 App 里选中文本 → 点系统选择菜单里的「AI 翻译」→ 译文以悬浮卡片出现，直接盖在当前界面之上。
+
+| 项目 | 说明 |
+| --- | --- |
+| 目标系统 | Android 16 (API 36)，minSdk 26 (Android 8) |
+| 权限 | **只有 `INTERNET`**（普通权限，安装即授予，不会弹任何授权框）—— 无悬浮窗/通知/前台服务/无障碍 |
+| 没有用到 | 悬浮窗权限 / 无障碍服务 / 通知 / 剪贴板读取 / 后台服务 / 读取其它应用 |
+| 体积 | 37 KB（零第三方依赖） |
+| 版本 | v3.1：删掉悬浮球全套（悬浮窗权限 / 前台服务 / 通知），回到**只有 INTERNET** 的零权限版；入口=选中菜单 + 分享 + ACTION_TRANSLATE 图标位 |
+
+---
+
+## 一、为什么“无权限”也能有悬浮窗
+
+1. **拿文字不靠权限**：选择菜单里的自定义项 = `android.intent.action.PROCESS_TEXT`（Android 6 起内置）。
+   只要声明这个 intent-filter，用户选中文本后系统会把选中内容通过 `Intent.EXTRA_PROCESS_TEXT`
+   塞进我们的 Intent —— 不需要剪贴板、不需要无障碍、不需要悬浮窗。
+2. **“悬浮”靠 Activity 而不是 WindowManager**：`ProcessTextActivity` 是一个半透明、无标题、
+   不遮暗背景的**对话框 Activity**，由系统在选择菜单里启动，因此天然位于调用方（你正在用的那个 App）
+   的窗口之上。它本质是“应用自己的界面”，所以**不需要 `SYSTEM_ALERT_WINDOW`**。
+3. 翻译请求由 App 自己用 `HttpURLConnection` 发给你配置的引擎，明文只存在本机。
+
+> 欧路词典的划词翻译用的是同一套 `ACTION_PROCESS_TEXT`（见《欧路词典AI翻译功能提取报告.md》）。
+
+## 二、安装
+
+```bash
+adb install -r dist/轻译.apk
+```
+或者把 `dist/轻译.apk` 拷到手机点击安装（自签名，允许“安装未知应用”即可）。
+
+## 三、第一次使用
+
+1. 打开「轻译」，在**目标语言**里选默认要翻译成的语言（默认“自动：中↔英”）。
+2. 在**AI 引擎**里挑一个，点「编辑」填 API Key（也可以点「添加引擎」加自己的）。
+   - **必须填**：接口地址、模型名；**按需填**：API Key（本地服务如 Ollama 可留空）。
+3. 点「测试」验证一下能通。
+4. 回到任意 App（浏览器、聊天、文档…）**长按选中一段文字**，在弹出菜单里点「AI 翻译」。
+   - **重点**：看不到时先点菜单右侧的 **⋮ / 更多** —— Android 14/16 和大多数国产 ROM 会把第三方“选中文本”动作收进二级菜单，不内联显示。
+   - 还看不到就换入口：选中文字 → 点「**分享**」→ 分享列表里的「轻译」。
+   - 想确认装没装好：打开「轻译」→「自检：菜单支持情况」，会列出系统登记的所有“选中菜单/分享菜单”提供方（含本应用）。
+   - **在浏览器/网页里永远看不到**：Chrome / Via / 各种 WebView 的选中菜单是内核自己画的（复制/分享/全选/搜索/查找），不列第三方项 —— 欧路词典、Google 翻译也一样，直接走「分享」入口。
+   - 菜单里显示的名字是「**轻译**」（和应用同名）。
+
+## 四、悬浮卡片上有什么
+
+- **引擎下拉框**：随时切换引擎（换一个会立即重新翻译，选择会被记住）。
+- **译文**：可长按选中复制；点「复制」整段复制。
+- **替换原文**：把译文写回输入框（只读文本会自动隐藏该按钮）。
+- **重新翻译**：重发请求。
+- **点卡片外面 / ✕**：关闭，回到原来的页面。
+
+## 五、拉取模型 / 选模型 / 逐个测试（v1.2）
+
+- **拉取模型**：设置页 → 某个引擎点「编辑」→ 点 **拉取模型**。会按引擎类型自动请求模型列表接口：
+  - OpenAI 兼容 / Anthropic：`GET …/models`（由对话地址推导，如 `…/chat/completions` → `…/models`），自动带你的 Key；
+  - Gemini：`GET …/v1beta/models?key=…`。
+  拉回来后弹出列表（按名字排序、显示条数），点一下就把模型名填进“模型名”框。
+- **逐引擎测试**：引擎列表每行的「测试」按钮，用“测试翻译”框里的文字（留空则用一句英文）单独试这个引擎，
+  结果开头会带 `[引擎名 / 模型名]`，方便对比同一服务下不同模型的翻译效果。
+- 底部的「测试」按钮仍然是“测试当前选中的引擎”。
+
+## 六、预设引擎（默认：皮皮）
+
+默认预设是**皮皮**。想接其它服务（DeepSeek / OpenAI / 智谱 / 本地 Ollama…）：点「**添加引擎**」，填接口地址、模型名、Key 即可 —— 支持 OpenAI 兼容 / Anthropic / Gemini 三种协议，也能用「拉取模型」在线取列表。
+
+接口地址**填基地址或完整地址都行**（客户端会自动补全 `/chat/completions`）：
+
+| 名称 | 类型 | 接口地址 | 模型 |
+| --- | --- | --- | --- |
+| 皮皮 | OpenAI 兼容 | `https://ai.pipiwangcom.com/v1`（等价 `…/v1/chat/completions`） | `deepseek-v4.1-flash` |
+
+升级说明：v1.3 起会自动清掉旧版本内置的一堆预设；v2.5 起自动把**没配置过**的 OpenAI 预设换成「皮皮」（填过 Key 的会保留）。
+
+提示词（“翻译风格”）也可在设置里改，默认是：
+
+```
+你是一个专业的翻译引擎，请把用户输入的文本翻译成{目标语言}。
+要求：1. 只输出译文本身，不要解释、不要加引号；
+      2. 保留换行与格式，术语一致；
+      3. 原文已是目标语言时翻译成英文。
+```
+`{目标语言}` 会被替换成上面选的语言（“自动”时写成“中文或英文，原文是中文就翻成英文，其它语言都翻成中文”）。
+
+## 七、重新编译
+
+本机验证过的构建方式是离线脚本（不需要 Gradle、不需要联网）：
+
+```bash
+ANDROID_SDK=/your/android-sdk ./build.sh     # 产出 dist/轻译.apk
+```
+依赖：SDK 的 `aapt2 / d8 / zipalign / apksigner` + JDK 的 `javac / keytool`。
+
+想在 Android Studio 里改：新建一个 Empty 工程，把 `app/src`、`app/res`、`app/AndroidManifest.xml`
+拷进去，删掉 manifest 的 `package="…"`（改用 `namespace "com.Lighttrans.app"`）即可，代码里没有任何第三方依赖。
+
+## 八、已知限制
+
+- 只处理 `text/plain` 的选择；某些 App（自带 WebView 内部选择、PDF 阅读器）不提供 PROCESS_TEXT 菜单。
+- 结果是一次性返回（没有做流式打字机效果）。
+- API Key 明文保存在 App 私有 SharedPreferences —— 手机没 Root 时其它应用读不到，但请别把带 Key 的备份到处传。
+- 本版本**不做**常驻悬浮球（那需要 `SYSTEM_ALERT_WINDOW`，v3.0 试过、v3.1 已删）。
+
+## 九、目录结构
+
+```
+轻译/
+├── build.sh                     # 离线构建脚本(已验证)
+├── README.md
+├── CHANGELOG.md / LICENSE
+├── .github/workflows/ci.yml     # push → 自动构建 + 发 Release
+├── ic_launcher.svg              # 图标源文件（矢量，真源）
+├── tools/make_icons.py          # 由 svg 生成各密度 PNG
+├── 欧路词典AI翻译功能提取报告.md
+├── app/
+│   ├── AndroidManifest.xml      # 声明 PROCESS_TEXT 入口 + INTERNET
+│   ├── res/                     # 主题 / 布局 / 图标
+│   └── src/com/lighttrans/app/
+│       ├── ProcessTextActivity.java   # 悬浮卡片本体(选择菜单入口)
+│       ├── MainActivity.java          # 设置:引擎/语言/提示词/测试
+│       ├── TranslateClient.java       # OpenAI兼容 / Anthropic / Gemini 三种协议
+│       ├── EngineStore.java           # 引擎列表与设置(SharedPreferences)
+│       └── Engine.java                # 引擎模型 + 内置预设
+└── dist/轻译.apk                # 构建产物(已签名)
+```
+
+## 十、开源协议
+
+[MIT](LICENSE) © 2026 U707T
+
+> 仓库结构：`CHANGELOG.md` 记录版本变更；`.github/workflows/ci.yml` 在 push 到 `main` 后自动构建 APK 并发布 Release
+> （若在仓库里配置了 `KEYSTORE_B64` / `KEYSTORE_PASS` 两个 Secret，CI 会用固定证书签名，保证旧版可以覆盖安装；
+> 没配置时用每次随机生成的调试证书，仅供测试）。
