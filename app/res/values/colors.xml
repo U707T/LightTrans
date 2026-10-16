@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_bg">#2F6BFF</color>
+    <color name="primary">#2F6BFF</color>
+    <color name="primary_soft">#EAF0FF</color>
+    <color name="bg_page">#F5F7FB</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="text_main">#15181E</color>
+    <color name="text_sub">#5F6673</color>
+    <color name="text_hint">#9AA1AE</color>
+    <color name="divider">#14000000</color>
+    <color name="danger">#CC3B33</color>
 </resources>

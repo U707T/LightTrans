@@ -12,6 +12,15 @@ public class Engine {
     public static final int TYPE_ANTHROPIC = 1; // Anthropic /v1/messages
     public static final int TYPE_GEMINI = 2;    // Google Gemini
 
+    /** 思考模式：跟随模型/服务商默认（不发送任何思考相关参数）。 */
+    public static final int THINK_AUTO = 0;
+    /** 思考模式：尽量关闭思考。 */
+    public static final int THINK_OFF = 1;
+    /** 思考模式：尽量开启深度思考。 */
+    public static final int THINK_ON = 2;
+
+    public static final String[] THINK_NAMES = {"自动", "关闭", "开启"};
+
     public String id;
     public String name;
     public int type;
@@ -20,6 +29,8 @@ public class Engine {
     public String key;
     /** 是否参与“多引擎对比”（勾选后，选中翻译时会和别的引擎同时出动） */
     public boolean compare = true;
+    /** 思考模式：THINK_AUTO / THINK_OFF / THINK_ON */
+    public int think = THINK_AUTO;
 
     public Engine(String id, String name, int type, String url, String model, String key) {
         this.id = id;
@@ -36,6 +47,12 @@ public class Engine {
         return "OpenAI 兼容";
     }
 
+    /** 思考模式的中文名（自动/关闭/开启）。 */
+    public String thinkName() {
+        if (think < 0 || think >= THINK_NAMES.length) return THINK_NAMES[0];
+        return THINK_NAMES[think];
+    }
+
     public boolean isConfigured() {
         return url.length() > 0 && model.length() > 0;
     }
@@ -49,6 +66,7 @@ public class Engine {
         o.put("model", model);
         o.put("key", key);
         o.put("cmp", compare);
+        o.put("think", think);
         return o;
     }
 
@@ -56,6 +74,8 @@ public class Engine {
         Engine e = new Engine(o.optString("id", ""), o.optString("name", ""), o.optInt("type", 0),
                 o.optString("url", ""), o.optString("model", ""), o.optString("key", ""));
         e.compare = o.optBoolean("cmp", true);
+        e.think = o.optInt("think", THINK_AUTO);
+        if (e.think < THINK_AUTO || e.think > THINK_ON) e.think = THINK_AUTO;
         return e;
     }
 

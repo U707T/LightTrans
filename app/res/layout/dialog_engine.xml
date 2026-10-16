@@ -13,21 +13,28 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="名称"
+            android:textColor="@color/text_sub"
             android:textSize="13sp" />
 
         <EditText
             android:id="@+id/edName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_input"
             android:hint="例如 DeepSeek"
             android:inputType="text"
+            android:padding="10dp"
+            android:textColor="@color/text_main"
+            android:textColorHint="@color/text_hint"
             android:textSize="14sp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="12dp"
             android:text="提供方类型"
+            android:textColor="@color/text_sub"
             android:textSize="13sp" />
 
         <Spinner
@@ -38,22 +45,49 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="12dp"
+            android:text="思考模式"
+            android:textColor="@color/text_sub"
+            android:textSize="13sp" />
+
+        <Spinner
+            android:id="@+id/spThink"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/text_hint"
+            android:textSize="11sp"
+            android:text="※ 自动 = 跟模型默认；关闭/开启会尝试发送 thinking / enable_thinking 参数（Anthropic 用 thinking budget、Gemini 用 thinkingConfig），服务商不支持时自动去掉重试。" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
             android:text="接口地址（…/v1 或 …/chat/completions 都行）"
+            android:textColor="@color/text_sub"
             android:textSize="13sp" />
 
         <EditText
             android:id="@+id/edUrl"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_input"
             android:hint="https://ai.pipiwangcom.com/v1"
             android:inputType="textUri"
+            android:padding="10dp"
+            android:textColor="@color/text_main"
+            android:textColorHint="@color/text_hint"
             android:textSize="13sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="12dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -62,13 +96,12 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="模型名（也可以点右侧按钮在线拉取）"
+                android:textColor="@color/text_sub"
                 android:textSize="13sp" />
 
             <Button
                 android:id="@+id/btnFetchModels"
-                style="?android:attr/buttonStyleSmall"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                style="@style/Btn.Small"
                 android:text="拉取模型" />
         </LinearLayout>
 
@@ -76,30 +109,41 @@
             android:id="@+id/edModel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_input"
             android:hint="deepseek-chat"
             android:inputType="text"
+            android:padding="10dp"
+            android:textColor="@color/text_main"
+            android:textColorHint="@color/text_hint"
             android:textSize="13sp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="12dp"
             android:text="API Key"
+            android:textColor="@color/text_sub"
             android:textSize="13sp" />
 
         <EditText
             android:id="@+id/edKey"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_input"
             android:hint="本地服务(Ollama 等)可留空"
             android:inputType="textVisiblePassword"
+            android:padding="10dp"
+            android:textColor="@color/text_main"
+            android:textColorHint="@color/text_hint"
             android:textSize="13sp" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:textColor="#888888"
+            android:textColor="@color/text_hint"
             android:textSize="11sp"
             android:text="※ 只要对方提供 OpenAI 兼容接口，就能加进来(DeepSeek / 智谱 / 通义 / Kimi / 豆包 / 硅基流动 / Ollama 本地 …)。\n※ Gemini 类型：模型名会替换进 URL 的 %s 占位符，Key 以 ?key= 追加。\n※ Key 仅保存在本机。" />
     </LinearLayout>

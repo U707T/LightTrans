@@ -2,6 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/bg_page"
     android:fitsSystemWindows="true">
 
     <LinearLayout
@@ -14,139 +15,212 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="轻译 · 选中即译"
-            android:textSize="20sp"
+            android:textColor="@color/text_main"
+            android:textSize="22sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="在任何 App 里选中文本 → 点菜单里的「AI 翻译」→ 结果以悬浮卡片显示在当前界面之上。无需悬浮窗、无障碍等任何权限。"
-            android:textColor="#555555"
+            android:text="在任何 App 里选中文本 → 点菜单里的「AI 翻译」→ 译文以悬浮卡片显示。无需悬浮窗 / 无障碍等任何权限。"
+            android:textColor="@color/text_sub"
             android:textSize="13sp" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="目标语言"
-            android:textSize="14sp"
-            android:textStyle="bold" />
-
-        <Spinner
-            android:id="@+id/spLang"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="翻译提示词(风格)"
-            android:textSize="14sp"
-            android:textStyle="bold" />
-
-        <EditText
-            android:id="@+id/edPrompt"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="top"
-            android:inputType="textMultiLine"
-            android:minLines="4"
-            android:textSize="13sp" />
-
-        <Button
-            android:id="@+id/btnResetPrompt"
-            style="?android:attr/buttonStyleSmall"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="end"
-            android:text="恢复默认提示词" />
+        <!-- ==================== 翻译设置 ==================== -->
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_section"
+            android:orientation="vertical"
+            android:padding="14dp">
 
             <TextView
-                android:layout_width="0dp"
+                style="@style/SectionTitle"
+                android:text="翻译设置" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:text="目标语言" />
+
+            <Spinner
+                android:id="@+id/spLang"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:text="翻译风格（点一下切换，下面可再微调提示词）" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="AI 引擎(选中文本时用哪个)"
-                android:textSize="14sp"
-                android:textStyle="bold" />
+                android:layout_marginTop="6dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/boxStyles"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <EditText
+                android:id="@+id/edPrompt"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_input"
+                android:gravity="top"
+                android:inputType="textMultiLine"
+                android:minLines="4"
+                android:padding="10dp"
+                android:textColor="@color/text_main"
+                android:textSize="13sp" />
 
             <Button
-                android:id="@+id/btnAddEngine"
-                style="?android:attr/buttonStyleSmall"
+                android:id="@+id/btnResetPrompt"
+                style="@style/Btn.Small"
+                android:layout_gravity="end"
+                android:layout_marginTop="6dp"
+                android:text="恢复默认" />
+
+            <CheckBox
+                android:id="@+id/cbStream"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="添加引擎" />
+                android:layout_marginTop="10dp"
+                android:buttonTint="@color/primary"
+                android:text="流式输出（打字机效果，服务不支持时自动回退）"
+                android:textColor="@color/text_main"
+                android:textSize="13sp" />
         </LinearLayout>
 
-        <CheckBox
-            android:id="@+id/cbMulti"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="多引擎对比（同时看多个引擎的结果，像欧路那样）"
-            android:textSize="13sp" />
+        <!-- ==================== AI 引擎 ==================== -->
 
         <LinearLayout
-            android:id="@+id/boxEngines"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" />
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_section"
+            android:orientation="vertical"
+            android:padding="14dp">
 
-        <TextView
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/SectionTitle"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:text="AI 引擎" />
+
+                <Button
+                    android:id="@+id/btnAddEngine"
+                    style="@style/Btn.Small"
+                    android:text="添加引擎" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="选中文本时用哪个引擎；给引擎勾上「参与对比」可以同时看多家结果。"
+                android:textColor="@color/text_hint"
+                android:textSize="11sp" />
+
+            <CheckBox
+                android:id="@+id/cbMulti"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:buttonTint="@color/primary"
+                android:text="多引擎对比（同时请求多个引擎）"
+                android:textColor="@color/text_main"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:id="@+id/boxEngines"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="vertical" />
+        </LinearLayout>
+
+        <!-- ==================== 测试 ==================== -->
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="测试翻译"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_section"
+            android:orientation="vertical"
+            android:padding="14dp">
 
-        <EditText
-            android:id="@+id/edTest"
+            <TextView
+                style="@style/SectionTitle"
+                android:text="测试翻译" />
+
+            <EditText
+                android:id="@+id/edTest"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_input"
+                android:hint="输入一段文字试试，结果会流式显示"
+                android:inputType="textMultiLine"
+                android:minLines="2"
+                android:padding="10dp"
+                android:textColor="@color/text_main"
+                android:textColorHint="@color/text_hint"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btnTest"
+                style="@style/Btn.Small"
+                android:layout_gravity="end"
+                android:layout_marginTop="6dp"
+                android:text="测试" />
+
+            <TextView
+                android:id="@+id/tvTest"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="@color/text_main"
+                android:textIsSelectable="true"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- ==================== 帮助 ==================== -->
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="输入一段文字试试"
-            android:inputType="textMultiLine"
-            android:minLines="2"
-            android:textSize="13sp" />
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_section"
+            android:orientation="vertical"
+            android:padding="14dp">
 
-        <Button
-            android:id="@+id/btnTest"
-            style="?android:attr/buttonStyleSmall"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="end"
-            android:text="测试" />
+            <Button
+                android:id="@+id/btnSelfCheck"
+                style="@style/Btn.Small"
+                android:layout_gravity="end"
+                android:text="自检：菜单支持情况" />
 
-        <TextView
-            android:id="@+id/tvTest"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textIsSelectable="true"
-            android:textSize="14sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textColor="@color/text_hint"
+                android:textSize="12sp"
+                android:text="· 权限：只有 INTERNET(普通权限，安装即授予，不弹窗) —— 悬浮窗/通知/无障碍全都不需要。\n· 三种入口：① 选中文字 → 点菜单里的「轻译」；② 选中 → 分享 →「轻译」；③ 浏览器的翻译图标（ACTION_TRANSLATE 通道）。\n· 原理：文本框的菜单项 = android.intent.action.PROCESS_TEXT；本应用以半透明对话框 Activity 的形式叠加在当前界面之上，看起来像悬浮窗，却不需要任何权限。\n· 菜单里看不到「轻译」时：点多选菜单右侧的 ⋮ 或「更多」，部分系统会把它收进二级菜单；网页里请走「分享」。\n· API Key 只保存在本机 SharedPreferences，请求直达你配置的引擎。\n· 流式输出 / 思考模式 / 翻译风格 都可以在悬浮卡片上即时切换。" />
+        </LinearLayout>
 
-        <Button
-            android:id="@+id/btnSelfCheck"
-            style="?android:attr/buttonStyleSmall"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="end"
-            android:layout_marginTop="6dp"
-            android:text="自检：菜单支持情况" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="22dp"
-            android:textColor="#777777"
-            android:textSize="12sp"
-            android:text="· 权限：只有 INTERNET(普通权限，安装即授予，不弹窗) —— 悬浮窗/通知/无障碍全都不需要。\n· 三种入口：① 选中文字 → 点菜单里的「轻译」（几秒前刚用 ACTIVITY_TRANSLATE 抢到了浏览器那个翻译图标位）；② 选中 → 分享 →「轻译」；③ 浏览器的翻译图标（ACTION_TRANSLATE 通道）。\n· 原理：文本框的菜单项(现在叫「轻译」) = android.intent.action.PROCESS_TEXT；本应用以一个半透明对话框 Activity 的形式叠加在当前界面之上，所以看起来像悬浮窗，却完全不需要 SYSTEM_ALERT_WINDOW。\n· 如果菜单里没看到「AI 翻译」：点多选菜单右侧的 ⋮ 或「更多」，部分系统(如 Android 16/HyperOS)会把不常用的项收进二级菜单。\n· API Key 只保存在本机 SharedPreferences，不会上传到任何服务器；请求直达你配置的引擎。\n· 长按卡片里的译文可选中复制；「替换原文」会把译文写回输入框(只读文本不显示该按钮)。" />
     </LinearLayout>
 </ScrollView>

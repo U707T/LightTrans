@@ -7,6 +7,7 @@ import android.content.ClipboardManager;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
+import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -27,17 +28,24 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
-/** 设置界面：目标语言、提示词(风格)、引擎管理、测试。 */
+/** 设置界面：目标语言、翻译风格(预选)、提示词、流式开关、引擎管理、测试。 */
 public class MainActivity extends Activity {
 
+    private static final int ACCENT = 0xFF2F6BFF;
+
     private EngineStore store;
-    private LinearLayout boxEngines;
+    private LinearLayout boxEngines, boxStyles;
     private Spinner spLang;
     private EditText edPrompt, edTest;
     private TextView tvTest;
-    private CheckBox cbMulti;
+    private CheckBox cbMulti, cbStream;
+    private final List<Button> chipViews = new ArrayList<Button>();
+    private final List<String> chipIds = new ArrayList<String>();
+    private boolean suppressPrompt = false;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -46,13 +54,15 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         boxEngines = (LinearLayout) findViewById(R.id.boxEngines);
+        boxStyles = (LinearLayout) findViewById(R.id.boxStyles);
         spLang = (Spinner) findViewById(R.id.spLang);
         edPrompt = (EditText) findViewById(R.id.edPrompt);
         edTest = (EditText) findViewById(R.id.edTest);
         tvTest = (TextView) findViewById(R.id.tvTest);
 
-        ArrayAdapter<String> la = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, EngineStore.LANGS);
-        la.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        // ---------- 目标语言 ----------
+        ArrayAdapter<String> la = new ArrayAdapter<String>(this, R.layout.item_spinner, EngineStore.LANGS);
+        la.setDropDownViewResource(R.layout.item_spinner_dropdown);
         spLang.setAdapter(la);
         String lang = store.targetLang();
         for (int i = 0; i < EngineStore.LANGS.length; i++) {
@@ -69,6 +79,9 @@ public class MainActivity extends Activity {
             }
         });
 
+        // ---------- 翻译风格（预选胶囊） ----------
+        rebuildStyles();
+
         edPrompt.setText(store.promptTemplate());
         edPrompt.addTextChangedListener(new TextWatcher() {
             @Override
@@ -81,15 +94,29 @@ public class MainActivity extends Activity {
 
             @Override
             public void afterTextChanged(Editable s) {
+                if (suppressPrompt) return;
                 store.setPromptTemplate(s.toString());
+                refreshStyleSelection();
             }
         });
 
         findViewById(R.id.btnResetPrompt).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                edPrompt.setText(EngineStore.DEFAULT_PROMPT);
-                toast("已恢复默认提示词");
+                store.applyStyle("general");
+                syncPromptEdit();
+                refreshStyleSelection();
+                toast("已恢复「通用」风格");
+            }
+        });
+
+        // ---------- 流式输出开关 ----------
+        cbStream = (CheckBox) findViewById(R.id.cbStream);
+        cbStream.setChecked(store.streamOn());
+        cbStream.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton b, boolean checked) {
+                store.setStreamOn(checked);
             }
         });
 
@@ -126,6 +153,61 @@ public class MainActivity extends Activity {
         rebuildEngines();
     }
 
+    // ---------- 翻译风格 ----------
+
+    private void rebuildStyles() {
+        boxStyles.removeAllViews();
+        chipViews.clear();
+        chipIds.clear();
+        for (int i = 0; i < EngineStore.STYLES.length; i++) {
+            addStyleChip(EngineStore.STYLES[i].id, EngineStore.STYLES[i].name);
+        }
+        addStyleChip(EngineStore.CUSTOM_STYLE_ID, "自定义");
+        refreshStyleSelection();
+    }
+
+    private void addStyleChip(final String id, String name) {
+        Button b = new Button(this);
+        b.setText(name);
+        b.setTextSize(12);
+        b.setStateListAnimator(null);
+        b.setBackgroundResource(R.drawable.bg_chip);
+        b.setTextColor(getResources().getColorStateList(R.color.chip_text));
+        b.setPadding(dp(12), dp(4), dp(12), dp(4));
+        b.setMinimumWidth(0);
+        b.setMinimumHeight(0);
+        b.setMinWidth(0);
+        b.setMinHeight(0);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.rightMargin = dp(6);
+        b.setLayoutParams(lp);
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                store.applyStyle(id);
+                syncPromptEdit();
+                refreshStyleSelection();
+            }
+        });
+        chipViews.add(b);
+        chipIds.add(id);
+        boxStyles.addView(b);
+    }
+
+    private void refreshStyleSelection() {
+        String cur = store.styleId();
+        for (int i = 0; i < chipViews.size(); i++) {
+            chipViews.get(i).setSelected(chipIds.get(i).equals(cur));
+        }
+    }
+
+    private void syncPromptEdit() {
+        suppressPrompt = true;
+        edPrompt.setText(store.promptTemplate());
+        suppressPrompt = false;
+    }
+
     // ---------- 引擎列表 ----------
 
     private void rebuildEngines() {
@@ -139,10 +221,16 @@ public class MainActivity extends Activity {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(6), 0, dp(6));
+            row.setBackgroundResource(R.drawable.bg_row);
+            row.setPadding(dp(10), dp(8), dp(10), dp(8));
+            LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            rlp.bottomMargin = dp(8);
+            row.setLayoutParams(rlp);
 
             RadioButton rb = new RadioButton(this);
             rb.setChecked(e.id.equals(sel));
+            rb.setButtonTintList(ColorStateList.valueOf(ACCENT));
             rb.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -158,16 +246,19 @@ public class MainActivity extends Activity {
             TextView t1 = new TextView(this);
             t1.setText(e.name);
             t1.setTextSize(15);
+            t1.setTextColor(0xFF15181E);
             TextView t2 = new TextView(this);
             t2.setText(e.typeName()
                     + (e.model.length() == 0 ? " · 未填模型" : " · " + e.model)
                     + (e.url.length() == 0 ? " · 未填地址" : "")
-                    + (e.key.length() == 0 ? " · 无 Key" : ""));
+                    + (e.key.length() == 0 ? " · 无 Key" : "")
+                    + (e.think == Engine.THINK_AUTO ? "" : " · 思考:" + e.thinkName()));
             t2.setTextSize(11);
-            t2.setTextColor(0xFF888888);
+            t2.setTextColor(0xFF9AA1AE);
             CheckBox cmp = new CheckBox(this);
             cmp.setText("参与对比");
             cmp.setTextSize(11);
+            cmp.setButtonTintList(ColorStateList.valueOf(ACCENT));
             cmp.setChecked(e.compare);
             cmp.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -179,40 +270,27 @@ public class MainActivity extends Activity {
             col.addView(t2);
             col.addView(cmp);
 
-            Button edit = new Button(this);
-            edit.setText("编辑");
-            edit.setMinimumWidth(0);
-            edit.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    editEngine(e, index);
-                }
-            });
-
-            Button del = new Button(this);
-            del.setText("删除");
-            del.setMinimumWidth(0);
-            del.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    confirmDelete(e, index);
-                }
-            });
-
-            Button test = new Button(this);
-            test.setText("测试");
-            test.setTextSize(12);
-            test.setMinimumWidth(0);
+            Button test = smallBtn("测试", R.drawable.btn_ghost, ACCENT);
             test.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     testEngine(e);
                 }
             });
-            edit.setTextSize(12);
-            edit.setMinimumWidth(0);
-            del.setTextSize(12);
-            del.setMinimumWidth(0);
+            Button edit = smallBtn("编辑", R.drawable.btn_ghost, ACCENT);
+            edit.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    editEngine(e, index);
+                }
+            });
+            Button del = smallBtn("删除", R.drawable.btn_plain, 0xFF5F6673);
+            del.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    confirmDelete(e, index);
+                }
+            });
 
             row.addView(rb);
             row.addView(col);
@@ -221,6 +299,25 @@ public class MainActivity extends Activity {
             row.addView(del);
             boxEngines.addView(row);
         }
+    }
+
+    private Button smallBtn(String text, int bg, int textColor) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextSize(12);
+        b.setTextColor(textColor);
+        b.setStateListAnimator(null);
+        b.setBackgroundResource(bg);
+        b.setPadding(dp(10), dp(4), dp(10), dp(4));
+        b.setMinimumWidth(0);
+        b.setMinimumHeight(0);
+        b.setMinWidth(0);
+        b.setMinHeight(0);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.leftMargin = dp(4);
+        b.setLayoutParams(lp);
+        return b;
     }
 
     /** 添加引擎：直接用 OpenAI 预设当模板，省掉一层“选预设”的弹窗。 */
@@ -233,15 +330,22 @@ public class MainActivity extends Activity {
         View v = LayoutInflater.from(this).inflate(R.layout.dialog_engine, null);
         final EditText edName = (EditText) v.findViewById(R.id.edName);
         final Spinner spType = (Spinner) v.findViewById(R.id.spType);
+        final Spinner spThink = (Spinner) v.findViewById(R.id.spThink);
         final EditText edUrl = (EditText) v.findViewById(R.id.edUrl);
         final EditText edModel = (EditText) v.findViewById(R.id.edModel);
         final EditText edKey = (EditText) v.findViewById(R.id.edKey);
 
         final String[] types = {"OpenAI 兼容", "Anthropic", "Gemini"};
-        ArrayAdapter<String> ta = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, types);
-        ta.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        ArrayAdapter<String> ta = new ArrayAdapter<String>(this, R.layout.item_spinner, types);
+        ta.setDropDownViewResource(R.layout.item_spinner_dropdown);
         spType.setAdapter(ta);
         if (e.type >= 0 && e.type < types.length) spType.setSelection(e.type);
+
+        final String[] thinks = {"自动（跟模型默认）", "关闭思考", "开启思考"};
+        ArrayAdapter<String> tha = new ArrayAdapter<String>(this, R.layout.item_spinner, thinks);
+        tha.setDropDownViewResource(R.layout.item_spinner_dropdown);
+        spThink.setAdapter(tha);
+        spThink.setSelection((e.think >= 0 && e.think <= 2) ? e.think : 0);
 
         edName.setText(e.name);
         edUrl.setText(e.url);
@@ -301,6 +405,8 @@ public class MainActivity extends Activity {
                         e.name = edName.getText().toString().trim();
                         int t = spType.getSelectedItemPosition();
                         e.type = (t < 0 || t > 2) ? Engine.TYPE_OPENAI : t;
+                        int th = spThink.getSelectedItemPosition();
+                        e.think = (th < 0 || th > 2) ? Engine.THINK_AUTO : th;
                         e.url = edUrl.getText().toString().trim();
                         e.model = edModel.getText().toString().trim();
                         e.key = edKey.getText().toString().trim();
@@ -346,6 +452,11 @@ public class MainActivity extends Activity {
 
     // ---------- 测试 ----------
 
+    private String resolvePrompt() {
+        return store.promptTemplate().replace("{目标语言}",
+                EngineStore.langInstruction(store.targetLang()));
+    }
+
     private void test() {
         String text = edTest.getText().toString().trim();
         if (text.length() == 0) {
@@ -357,15 +468,9 @@ public class MainActivity extends Activity {
             tvTest.setText("「" + e.name + "」还没填接口地址或模型。");
             return;
         }
+        tvTest.setTextColor(0xFF15181E);
         tvTest.setText("测试中… (" + e.name + ")");
-        String prompt = store.promptTemplate().replace("{目标语言}",
-                EngineStore.langInstruction(store.targetLang()));
-        TranslateClient.translateAsync(e, prompt, text, store.timeoutSec(), new TranslateClient.Callback() {
-            @Override
-            public void onDone(String out, String error) {
-                tvTest.setText(error != null ? "失败： " + error : out);
-            }
-        });
+        runTest(e, resolvePrompt(), text, false);
     }
 
     /** 单独测试某个引擎（用“测试翻译”框里的文字，空则用默认句子）。 */
@@ -376,17 +481,67 @@ public class MainActivity extends Activity {
             toast("「" + e.name + "」还没填接口地址或模型");
             return;
         }
+        tvTest.setTextColor(0xFF15181E);
         tvTest.setText("测试中… (" + e.name + " / " + e.model + ")");
-        String prompt = store.promptTemplate().replace("{目标语言}",
-                EngineStore.langInstruction(store.targetLang()));
-        TranslateClient.translateAsync(e, prompt, text, store.timeoutSec(), new TranslateClient.Callback() {
+        runTest(e, resolvePrompt(), text, true);
+    }
+
+    /** 流式测试：结果边收边显示，跟悬浮卡片同款效果。 */
+    private void runTest(final Engine e, String prompt, final String text, final boolean withModel) {
+        final StringBuilder tb = new StringBuilder();
+        final long[] last = {0};
+        final boolean[] thinking = {false};
+        final long start = System.currentTimeMillis();
+        final TranslateClient.StreamCallback sink = new TranslateClient.StreamCallback() {
             @Override
-            public void onDone(String out, String error) {
-                tvTest.setText(error != null
-                        ? "[" + e.name + "] 失败： " + error
-                        : "[" + e.name + " / " + e.model + "]\n" + out);
+            public void onDelta(String d) {
+                tb.append(d);
+                long now = System.currentTimeMillis();
+                if (now - last[0] < 80) return;
+                last[0] = now;
+                tvTest.setText(head(e, withModel, 0) + tb + "▍");
             }
-        });
+
+            @Override
+            public void onReasoning(String d) {
+                if (tb.length() == 0 && !thinking[0]) {
+                    thinking[0] = true;
+                    tvTest.setText("模型思考中…");
+                }
+            }
+
+            @Override
+            public void onDone(String full, String error) {
+                if (error != null) {
+                    tvTest.setTextColor(0xFFCC3B33);
+                    tvTest.setText(head(e, withModel, 0) + "失败： " + error
+                            + (tb.length() > 0 ? "\n（部分输出）\n" + tb : ""));
+                } else {
+                    if (tb.length() == 0 && full != null) tb.append(full);
+                    tvTest.setTextColor(0xFF15181E);
+                    tvTest.setText(head(e, withModel, System.currentTimeMillis() - start) + tb);
+                }
+            }
+        };
+        if (store.streamOn()) {
+            TranslateClient.translateStreamAsync(e, prompt, text, store.timeoutSec(), sink);
+        } else {
+            TranslateClient.translateAsync(e, prompt, text, store.timeoutSec(), new TranslateClient.Callback() {
+                @Override
+                public void onDone(String out, String err) {
+                    sink.onDone(out, err);
+                }
+            });
+        }
+    }
+
+    private static String head(Engine e, boolean withModel, long ms) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("[").append(e.name);
+        if (withModel && e.model.length() > 0) sb.append(" / ").append(e.model);
+        if (ms > 0) sb.append(" · ").append(String.format(Locale.CHINA, "%.1fs", ms / 1000.0));
+        sb.append("]\n");
+        return sb.toString();
     }
 
     /** 自检：把系统里所有“选中菜单 / 分享菜单”提供方列出来，方便判断是没装好还是被菜单藏起来了。 */
