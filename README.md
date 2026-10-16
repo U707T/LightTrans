@@ -91,7 +91,11 @@ adb install -r dist/轻译.apk
 本机验证过的构建方式是离线脚本（不需要 Gradle、不需要联网）：
 
 ```bash
-ANDROID_SDK=/your/android-sdk ./build.sh     # 产出 dist/轻译.apk
+ANDROID_SDK=/your/android-sdk ./build.sh     # 产出 dist/轻译.apk（自动生成调试证书签名）
+
+# 想和 CI 的 Release 用同一张证书（这样能覆盖安装）：
+KEYSTORE_B64=$(base64 -w0 ../轻译-keys/lighttrans-release.jks) \
+KEYSTORE_PASS=$(cat ../轻译-keys/lighttrans-release-password.txt) ./build.sh
 ```
 依赖：SDK 的 `aapt2 / d8 / zipalign / apksigner` + JDK 的 `javac / keytool`。
 

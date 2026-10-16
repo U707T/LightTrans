@@ -48,6 +48,9 @@ jobs:
           $AAPT dump xmltree --file AndroidManifest.xml dist/*.apk | grep -q "android.intent.action.TRANSLATE"
           $AAPT dump xmltree --file AndroidManifest.xml dist/*.apk | grep -q "android.intent.action.PROCESS_TEXT"
 
+      - name: 产物改名（Release 用 ASCII 文件名）
+        run: cp dist/*.apk "LightTrans-v${{ steps.ver.outputs.version }}.apk"
+
       - name: 生成 Release 说明（取 CHANGELOG 顶部一段）
         run: awk '/^## /{n++} n==1{print} n>=2{exit}' CHANGELOG.md > RELEASE_NOTES.md || true
 
@@ -58,4 +61,4 @@ jobs:
           name: 轻译 v${{ steps.ver.outputs.version }}
           body_path: RELEASE_NOTES.md
           prerelease: ${{ contains(steps.ver.outputs.version, '-rc') }}
-          files: dist/*.apk
+          files: LightTrans-v${{ steps.ver.outputs.version }}.apk
