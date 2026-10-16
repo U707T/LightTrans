@@ -29,8 +29,10 @@ public class Engine {
     public String key;
     /** 是否参与“多引擎对比”（勾选后，选中翻译时会和别的引擎同时出动） */
     public boolean compare = true;
-    /** 思考模式：THINK_AUTO / THINK_OFF / THINK_ON */
-    public int think = THINK_AUTO;
+    /** 思考模式：THINK_AUTO / THINK_OFF / THINK_ON（默认关闭思考，翻译更快） */
+    public int think = THINK_OFF;
+    /** 这个引擎认不认思考参数：被服务商拒过一次后置 false，之后直接跳过参数（省一次往返）。 */
+    public boolean thinkParamOk = true;
     /** 这个引擎用的翻译风格 id（EngineStore.STYLES 里的 id 或 CUSTOM_STYLE_ID）；空 = 通用。 */
     public String style = "";
     /** 风格选「自定义」时使用的提示词（一般人用不到）。 */
@@ -71,6 +73,7 @@ public class Engine {
         o.put("key", key);
         o.put("cmp", compare);
         o.put("think", think);
+        o.put("thinkOk", thinkParamOk);
         o.put("style", style);
         o.put("customPrompt", customPrompt);
         return o;
@@ -80,8 +83,9 @@ public class Engine {
         Engine e = new Engine(o.optString("id", ""), o.optString("name", ""), o.optInt("type", 0),
                 o.optString("url", ""), o.optString("model", ""), o.optString("key", ""));
         e.compare = o.optBoolean("cmp", true);
-        e.think = o.optInt("think", THINK_AUTO);
-        if (e.think < THINK_AUTO || e.think > THINK_ON) e.think = THINK_AUTO;
+        e.think = o.optInt("think", THINK_OFF);
+        if (e.think < THINK_AUTO || e.think > THINK_ON) e.think = THINK_OFF;
+        e.thinkParamOk = o.optBoolean("thinkOk", true);
         e.style = o.optString("style", "");
         e.customPrompt = o.optString("customPrompt", "");
         return e;

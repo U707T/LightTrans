@@ -160,7 +160,7 @@ public class MainActivity extends Activity {
                     + (e.key.length() == 0 ? " · 无 Key" : "")
                     + (e.style == null || e.style.length() == 0 || "general".equals(e.style)
                        ? "" : " · 风格:" + EngineStore.styleName(e.style))
-                    + (e.think == Engine.THINK_AUTO ? "" : " · 思考:" + e.thinkName()));
+                    + (e.think == Engine.THINK_ON ? " · 思考:开启" : ""));
             t2.setTextSize(11);
             t2.setTextColor(0xFF9AA1AE);
             CheckBox cmp = new CheckBox(this);
@@ -255,35 +255,32 @@ public class MainActivity extends Activity {
         spThink.setAdapter(tha);
         spThink.setSelection((e.think >= 0 && e.think <= 2) ? e.think : 0);
 
-        // 翻译风格：每个引擎各自的；只有选「自定义」时才出现提示词编辑框
+        // 翻译风格：每个引擎各自的（下拉只列内置风格）；想用自定义提示词要勾底下的高级开关
         final Spinner spStyle = (Spinner) v.findViewById(R.id.spStyle);
+        final CheckBox cbCustom = (CheckBox) v.findViewById(R.id.cbCustomPrompt);
         final EditText edCustomPrompt = (EditText) v.findViewById(R.id.edCustomPrompt);
         final View boxCustomPrompt = v.findViewById(R.id.boxCustomPrompt);
         ArrayAdapter<String> stA = new ArrayAdapter<String>(this, R.layout.item_spinner, EngineStore.styleLabels());
         stA.setDropDownViewResource(R.layout.item_spinner_dropdown);
         spStyle.setAdapter(stA);
         int stylePos = 0;
-        if (EngineStore.CUSTOM_STYLE_ID.equals(e.style)) {
-            stylePos = EngineStore.STYLES.length;
-        } else {
-            for (int i = 0; i < EngineStore.STYLES.length; i++) {
-                if (EngineStore.STYLES[i].id.equals(e.style)) {
-                    stylePos = i;
-                    break;
-                }
+        for (int i = 0; i < EngineStore.STYLES.length; i++) {
+            if (EngineStore.STYLES[i].id.equals(e.style)) {
+                stylePos = i;
+                break;
             }
         }
         spStyle.setSelection(stylePos);
+        final boolean wasCustom = EngineStore.CUSTOM_STYLE_ID.equals(e.style);
+        cbCustom.setChecked(wasCustom);
         edCustomPrompt.setText(e.customPrompt == null ? "" : e.customPrompt);
-        boxCustomPrompt.setVisibility(stylePos == EngineStore.STYLES.length ? View.VISIBLE : View.GONE);
-        spStyle.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        boxCustomPrompt.setVisibility(wasCustom ? View.VISIBLE : View.GONE);
+        spStyle.setEnabled(!wasCustom);
+        cbCustom.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
-            public void onItemSelected(AdapterView<?> p, View v2, int pos, long id2) {
-                boxCustomPrompt.setVisibility(pos == EngineStore.STYLES.length ? View.VISIBLE : View.GONE);
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> p) {
+            public void onCheckedChanged(CompoundButton b, boolean checked) {
+                boxCustomPrompt.setVisibility(checked ? View.VISIBLE : View.GONE);
+                spStyle.setEnabled(!checked);
             }
         });
 
@@ -347,10 +344,15 @@ public class MainActivity extends Activity {
                         e.type = (t < 0 || t > 2) ? Engine.TYPE_OPENAI : t;
                         int th = spThink.getSelectedItemPosition();
                         e.think = (th < 0 || th > 2) ? Engine.THINK_AUTO : th;
-                        int st = spStyle.getSelectedItemPosition();
-                        e.style = (st >= 0 && st < EngineStore.STYLES.length)
-                                ? EngineStore.STYLES[st].id : EngineStore.CUSTOM_STYLE_ID;
                         e.customPrompt = edCustomPrompt.getText().toString().trim();
+                        if (cbCustom.isChecked() && e.customPrompt.length() > 0) {
+                            e.style = EngineStore.CUSTOM_STYLE_ID;
+                        } else {
+                            int st = spStyle.getSelectedItemPosition();
+                            e.style = (st >= 0 && st < EngineStore.STYLES.length)
+                                    ? EngineStore.STYLES[st].id : "general";
+                        }
+                        e.thinkParamOk = true; // 配置有变化，重新探测一次思考参数支持
                         e.url = edUrl.getText().toString().trim();
                         e.model = edModel.getText().toString().trim();
                         e.key = edKey.getText().toString().trim();
@@ -456,6 +458,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onDone(String full, String error) {
+                store.flushEngineFlags(e);
                 if (error != null) {
                     tvTest.setTextColor(0xFFCC3B33);
                     tvTest.setText(head(e, withModel, 0) + "失败： " + error

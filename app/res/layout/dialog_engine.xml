@@ -55,6 +55,16 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
+        <CheckBox
+            android:id="@+id/cbCustomPrompt"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:buttonTint="@color/primary"
+            android:text="高级：使用自定义提示词（一般用不到）"
+            android:textColor="@color/text_sub"
+            android:textSize="12sp" />
+
         <LinearLayout
             android:id="@+id/boxCustomPrompt"
             android:layout_width="match_parent"
@@ -66,7 +76,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="自定义提示词（{目标语言} 会替换成目标语言；留空则用「通用」。一般用不到）"
+                android:text="留空则用「通用」；{目标语言} 会替换成目标语言。"
                 android:textColor="@color/text_hint"
                 android:textSize="11sp" />
 

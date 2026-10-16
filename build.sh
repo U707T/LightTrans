@@ -25,7 +25,7 @@ echo "== 2/6 aapt2 compile + link =="
 "$AAPT2" link -o "$OUT/base.apk" -I "$JAR" \
   --manifest app/AndroidManifest.xml --java "$OUT/gen" \
   --min-sdk-version 26 --target-sdk-version 36 \
-  --version-code 20 --version-name 3.3 "$OUT/res.zip"
+  --version-code 21 --version-name 3.4 "$OUT/res.zip"
 
 echo "== 3/6 javac =="
 find app/src "$OUT/gen" -name '*.java' > "$OUT/sources.txt"

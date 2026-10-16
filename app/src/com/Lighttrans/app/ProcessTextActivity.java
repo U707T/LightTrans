@@ -333,7 +333,7 @@ public class ProcessTextActivity extends Activity {
             head.setText(e.name + (e.model.length() > 0 ? "  ·  " + e.model : "") + "  ·  " + e.typeName()
                     + (e.style == null || e.style.length() == 0 || "general".equals(e.style)
                        ? "" : "  ·  " + EngineStore.styleName(e.style))
-                    + (e.think == Engine.THINK_AUTO ? "" : "  ·  思考" + e.thinkName()));
+                    + (e.think == Engine.THINK_ON ? "  ·  思考开启" : ""));
             head.setTextSize(11);
             head.setTextColor(0xFF9AA1AE);
             final TextView body = new TextView(this);
@@ -396,6 +396,7 @@ public class ProcessTextActivity extends Activity {
         @Override
         public final void onDone(String full, String error) {
             if (reqSeq != seq) return;
+            store.flushEngineFlags(eng);
             if (error == null && ans.length() == 0 && full != null && full.length() > 0) ans.append(full);
             render(true);
             onFinish(error);

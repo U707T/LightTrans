@@ -94,11 +94,10 @@ public class EngineStore {
         return null;
     }
 
-    /** 风格下拉框用的名字列表（内置风格 + 末尾一个“自定义”）。 */
+    /** 风格下拉框用的名字列表（只列内置风格；「自定义」不显示，需要时在引擎编辑里勾高级开关）。 */
     public static String[] styleLabels() {
-        String[] out = new String[STYLES.length + 1];
+        String[] out = new String[STYLES.length];
         for (int i = 0; i < STYLES.length; i++) out[i] = STYLES[i].name;
-        out[STYLES.length] = "自定义";
         return out;
     }
 
@@ -222,6 +221,16 @@ public class EngineStore {
             changed = true;
             sp.edit().remove("styleId").remove("prompt").remove("prompt_custom").apply();
         }
+        // 一次性迁移：思考模式默认关闭（旧默认“自动”→“关闭”，翻译更快）
+        if (!sp.getBoolean("migrated_think_off", false)) {
+            sp.edit().putBoolean("migrated_think_off", true).apply();
+            for (int i = 0; i < list.size(); i++) {
+                if (list.get(i).think == Engine.THINK_AUTO) {
+                    list.get(i).think = Engine.THINK_OFF;
+                    changed = true;
+                }
+            }
+        }
         if (list.isEmpty()) {
             list.addAll(Engine.presets());
             changed = true;
@@ -299,13 +308,32 @@ public class EngineStore {
         saveEngines(list);
     }
 
-    /** 改某个引擎的思考模式（悬浮卡片上的快捷按钮会调它）。 */
+    /** 改某个引擎的思考模式（悬浮卡片上的快捷按钮会调它）；改了之后重新探测一次参数支持情况。 */
     public void setEngineThink(String id, int think) {
         List<Engine> list = engines();
         for (int i = 0; i < list.size(); i++) {
-            if (list.get(i).id.equals(id)) list.get(i).think = think;
+            Engine e = list.get(i);
+            if (e.id.equals(id)) {
+                e.think = think;
+                e.thinkParamOk = true;
+            }
         }
         saveEngines(list);
+    }
+
+    /** 请求层发现某引擎不认识思考参数后，把“别再用参数”这个结论落盘（下次直接跳过，省一次 400 往返）。 */
+    public void flushEngineFlags(Engine e) {
+        if (e == null || e.thinkParamOk) return;
+        List<Engine> list = engines();
+        boolean changed = false;
+        for (int i = 0; i < list.size(); i++) {
+            Engine x = list.get(i);
+            if (x.id.equals(e.id) && x.thinkParamOk) {
+                x.thinkParamOk = false;
+                changed = true;
+            }
+        }
+        if (changed) saveEngines(list);
     }
 
     public int timeoutSec() {

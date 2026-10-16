@@ -223,6 +223,15 @@ public class TranslateClient {
         return url + "/models";
     }
 
+    /** 本次请求要不要按“关闭/开启思考”发参数；被服务商拒过一次后就不再发（省一次 400 往返）。 */
+    private static boolean useThink(Engine e) {
+        return e.think != Engine.THINK_AUTO && e.thinkParamOk;
+    }
+
+    private static int bodyThink(Engine e) {
+        return useThink(e) ? e.think : Engine.THINK_AUTO;
+    }
+
     // ==================== 非流式 ====================
 
     public static String translate(Engine e, String prompt, String text, int timeoutSec) throws Exception {
@@ -237,9 +246,10 @@ public class TranslateClient {
 
         JSONObject resp;
         try {
-            resp = postJson(chatUrl(e), openaiBody(e, prompt, text, false, e.think), h, timeoutSec);
+            resp = postJson(chatUrl(e), openaiBody(e, prompt, text, false, bodyThink(e)), h, timeoutSec);
         } catch (HttpError he) {
-            if (e.think == Engine.THINK_AUTO || !isParamError(he.code, he.raw)) throw he;
+            if (!useThink(e) || !isParamError(he.code, he.raw)) throw he;
+            e.thinkParamOk = false;
             resp = postJson(chatUrl(e), openaiBody(e, prompt, text, false, Engine.THINK_AUTO), h, timeoutSec);
         }
         JSONArray choices = resp.optJSONArray("choices");
@@ -310,9 +320,10 @@ public class TranslateClient {
 
         JSONObject resp;
         try {
-            resp = postJson(chatUrl(e), anthropicBody(e, prompt, text, false, e.think), h, timeoutSec);
+            resp = postJson(chatUrl(e), anthropicBody(e, prompt, text, false, bodyThink(e)), h, timeoutSec);
         } catch (HttpError he) {
-            if (e.think != Engine.THINK_ON || !isParamError(he.code, he.raw)) throw he;
+            if (e.think != Engine.THINK_ON || !e.thinkParamOk || !isParamError(he.code, he.raw)) throw he;
+            e.thinkParamOk = false;
             resp = postJson(chatUrl(e), anthropicBody(e, prompt, text, false, Engine.THINK_AUTO), h, timeoutSec);
         }
         JSONArray content = resp.optJSONArray("content");
@@ -353,9 +364,10 @@ public class TranslateClient {
     private static String gemini(Engine e, String prompt, String text, int timeoutSec) throws Exception {
         JSONObject resp;
         try {
-            resp = postJson(geminiUrl(e, false), geminiBody(e, prompt, text, e.think), null, timeoutSec);
+            resp = postJson(geminiUrl(e, false), geminiBody(e, prompt, text, bodyThink(e)), null, timeoutSec);
         } catch (HttpError he) {
-            if (e.think == Engine.THINK_AUTO || !isParamError(he.code, he.raw)) throw he;
+            if (!useThink(e) || !isParamError(he.code, he.raw)) throw he;
+            e.thinkParamOk = false;
             resp = postJson(geminiUrl(e, false), geminiBody(e, prompt, text, Engine.THINK_AUTO), null, timeoutSec);
         }
         return clean(geminiText(resp));
@@ -443,9 +455,10 @@ public class TranslateClient {
 
         HttpURLConnection conn;
         try {
-            conn = openPost(url, openaiBody(e, prompt, text, true, e.think), h, timeoutSec, true);
+            conn = openPost(url, openaiBody(e, prompt, text, true, bodyThink(e)), h, timeoutSec, true);
         } catch (HttpError he) {
-            if (e.think == Engine.THINK_AUTO || !isParamError(he.code, he.raw)) throw he;
+            if (!useThink(e) || !isParamError(he.code, he.raw)) throw he;
+            e.thinkParamOk = false;
             conn = openPost(url, openaiBody(e, prompt, text, true, Engine.THINK_AUTO), h, timeoutSec, true);
         }
         try {
@@ -492,9 +505,10 @@ public class TranslateClient {
 
         HttpURLConnection conn;
         try {
-            conn = openPost(url, anthropicBody(e, prompt, text, true, e.think), h, timeoutSec, true);
+            conn = openPost(url, anthropicBody(e, prompt, text, true, bodyThink(e)), h, timeoutSec, true);
         } catch (HttpError he) {
-            if (e.think != Engine.THINK_ON || !isParamError(he.code, he.raw)) throw he;
+            if (e.think != Engine.THINK_ON || !e.thinkParamOk || !isParamError(he.code, he.raw)) throw he;
+            e.thinkParamOk = false;
             conn = openPost(url, anthropicBody(e, prompt, text, true, Engine.THINK_AUTO), h, timeoutSec, true);
         }
         try {
@@ -534,9 +548,10 @@ public class TranslateClient {
         String url = geminiUrl(e, true);
         HttpURLConnection conn;
         try {
-            conn = openPost(url, geminiBody(e, prompt, text, e.think), null, timeoutSec, true);
+            conn = openPost(url, geminiBody(e, prompt, text, bodyThink(e)), null, timeoutSec, true);
         } catch (HttpError he) {
-            if (e.think == Engine.THINK_AUTO || !isParamError(he.code, he.raw)) throw he;
+            if (!useThink(e) || !isParamError(he.code, he.raw)) throw he;
+            e.thinkParamOk = false;
             conn = openPost(url, geminiBody(e, prompt, text, Engine.THINK_AUTO), null, timeoutSec, true);
         }
         try {
