@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-SDK="${ANDROID_SDK:-/opt/android-sdk}"
+SDK="${ANDROID_SDK:-${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/opt/android-sdk}}}"
 PLATFORM="${PLATFORM:-android-36}"
 BT="$SDK/build-tools/${BUILD_TOOLS:-36.0.0}"
 JAR="$SDK/platforms/$PLATFORM/android.jar"
