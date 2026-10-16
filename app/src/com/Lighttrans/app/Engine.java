@@ -31,6 +31,10 @@ public class Engine {
     public boolean compare = true;
     /** 思考模式：THINK_AUTO / THINK_OFF / THINK_ON */
     public int think = THINK_AUTO;
+    /** 这个引擎用的翻译风格 id（EngineStore.STYLES 里的 id 或 CUSTOM_STYLE_ID）；空 = 通用。 */
+    public String style = "";
+    /** 风格选「自定义」时使用的提示词（一般人用不到）。 */
+    public String customPrompt = "";
 
     public Engine(String id, String name, int type, String url, String model, String key) {
         this.id = id;
@@ -67,6 +71,8 @@ public class Engine {
         o.put("key", key);
         o.put("cmp", compare);
         o.put("think", think);
+        o.put("style", style);
+        o.put("customPrompt", customPrompt);
         return o;
     }
 
@@ -76,6 +82,8 @@ public class Engine {
         e.compare = o.optBoolean("cmp", true);
         e.think = o.optInt("think", THINK_AUTO);
         if (e.think < THINK_AUTO || e.think > THINK_ON) e.think = THINK_AUTO;
+        e.style = o.optString("style", "");
+        e.customPrompt = o.optString("customPrompt", "");
         return e;
     }
 

@@ -9,8 +9,6 @@ import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.content.res.ColorStateList;
 import android.os.Bundle;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -28,7 +26,6 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -38,14 +35,11 @@ public class MainActivity extends Activity {
     private static final int ACCENT = 0xFF2F6BFF;
 
     private EngineStore store;
-    private LinearLayout boxEngines, boxStyles;
+    private LinearLayout boxEngines;
     private Spinner spLang;
-    private EditText edPrompt, edTest;
+    private EditText edTest;
     private TextView tvTest;
     private CheckBox cbMulti, cbStream;
-    private final List<Button> chipViews = new ArrayList<Button>();
-    private final List<String> chipIds = new ArrayList<String>();
-    private boolean suppressPrompt = false;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -54,9 +48,7 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         boxEngines = (LinearLayout) findViewById(R.id.boxEngines);
-        boxStyles = (LinearLayout) findViewById(R.id.boxStyles);
         spLang = (Spinner) findViewById(R.id.spLang);
-        edPrompt = (EditText) findViewById(R.id.edPrompt);
         edTest = (EditText) findViewById(R.id.edTest);
         tvTest = (TextView) findViewById(R.id.tvTest);
 
@@ -76,37 +68,6 @@ public class MainActivity extends Activity {
 
             @Override
             public void onNothingSelected(AdapterView<?> p) {
-            }
-        });
-
-        // ---------- 翻译风格（预选胶囊） ----------
-        rebuildStyles();
-
-        edPrompt.setText(store.promptTemplate());
-        edPrompt.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int a, int c, int d) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int a, int c, int d) {
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                if (suppressPrompt) return;
-                store.setPromptTemplate(s.toString());
-                refreshStyleSelection();
-            }
-        });
-
-        findViewById(R.id.btnResetPrompt).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                store.applyStyle("general");
-                syncPromptEdit();
-                refreshStyleSelection();
-                toast("已恢复「通用」风格");
             }
         });
 
@@ -153,61 +114,6 @@ public class MainActivity extends Activity {
         rebuildEngines();
     }
 
-    // ---------- 翻译风格 ----------
-
-    private void rebuildStyles() {
-        boxStyles.removeAllViews();
-        chipViews.clear();
-        chipIds.clear();
-        for (int i = 0; i < EngineStore.STYLES.length; i++) {
-            addStyleChip(EngineStore.STYLES[i].id, EngineStore.STYLES[i].name);
-        }
-        addStyleChip(EngineStore.CUSTOM_STYLE_ID, "自定义");
-        refreshStyleSelection();
-    }
-
-    private void addStyleChip(final String id, String name) {
-        Button b = new Button(this);
-        b.setText(name);
-        b.setTextSize(12);
-        b.setStateListAnimator(null);
-        b.setBackgroundResource(R.drawable.bg_chip);
-        b.setTextColor(getResources().getColorStateList(R.color.chip_text));
-        b.setPadding(dp(12), dp(4), dp(12), dp(4));
-        b.setMinimumWidth(0);
-        b.setMinimumHeight(0);
-        b.setMinWidth(0);
-        b.setMinHeight(0);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.rightMargin = dp(6);
-        b.setLayoutParams(lp);
-        b.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                store.applyStyle(id);
-                syncPromptEdit();
-                refreshStyleSelection();
-            }
-        });
-        chipViews.add(b);
-        chipIds.add(id);
-        boxStyles.addView(b);
-    }
-
-    private void refreshStyleSelection() {
-        String cur = store.styleId();
-        for (int i = 0; i < chipViews.size(); i++) {
-            chipViews.get(i).setSelected(chipIds.get(i).equals(cur));
-        }
-    }
-
-    private void syncPromptEdit() {
-        suppressPrompt = true;
-        edPrompt.setText(store.promptTemplate());
-        suppressPrompt = false;
-    }
-
     // ---------- 引擎列表 ----------
 
     private void rebuildEngines() {
@@ -252,6 +158,8 @@ public class MainActivity extends Activity {
                     + (e.model.length() == 0 ? " · 未填模型" : " · " + e.model)
                     + (e.url.length() == 0 ? " · 未填地址" : "")
                     + (e.key.length() == 0 ? " · 无 Key" : "")
+                    + (e.style == null || e.style.length() == 0 || "general".equals(e.style)
+                       ? "" : " · 风格:" + EngineStore.styleName(e.style))
                     + (e.think == Engine.THINK_AUTO ? "" : " · 思考:" + e.thinkName()));
             t2.setTextSize(11);
             t2.setTextColor(0xFF9AA1AE);
@@ -347,6 +255,38 @@ public class MainActivity extends Activity {
         spThink.setAdapter(tha);
         spThink.setSelection((e.think >= 0 && e.think <= 2) ? e.think : 0);
 
+        // 翻译风格：每个引擎各自的；只有选「自定义」时才出现提示词编辑框
+        final Spinner spStyle = (Spinner) v.findViewById(R.id.spStyle);
+        final EditText edCustomPrompt = (EditText) v.findViewById(R.id.edCustomPrompt);
+        final View boxCustomPrompt = v.findViewById(R.id.boxCustomPrompt);
+        ArrayAdapter<String> stA = new ArrayAdapter<String>(this, R.layout.item_spinner, EngineStore.styleLabels());
+        stA.setDropDownViewResource(R.layout.item_spinner_dropdown);
+        spStyle.setAdapter(stA);
+        int stylePos = 0;
+        if (EngineStore.CUSTOM_STYLE_ID.equals(e.style)) {
+            stylePos = EngineStore.STYLES.length;
+        } else {
+            for (int i = 0; i < EngineStore.STYLES.length; i++) {
+                if (EngineStore.STYLES[i].id.equals(e.style)) {
+                    stylePos = i;
+                    break;
+                }
+            }
+        }
+        spStyle.setSelection(stylePos);
+        edCustomPrompt.setText(e.customPrompt == null ? "" : e.customPrompt);
+        boxCustomPrompt.setVisibility(stylePos == EngineStore.STYLES.length ? View.VISIBLE : View.GONE);
+        spStyle.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> p, View v2, int pos, long id2) {
+                boxCustomPrompt.setVisibility(pos == EngineStore.STYLES.length ? View.VISIBLE : View.GONE);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> p) {
+            }
+        });
+
         edName.setText(e.name);
         edUrl.setText(e.url);
         edModel.setText(e.model);
@@ -407,6 +347,10 @@ public class MainActivity extends Activity {
                         e.type = (t < 0 || t > 2) ? Engine.TYPE_OPENAI : t;
                         int th = spThink.getSelectedItemPosition();
                         e.think = (th < 0 || th > 2) ? Engine.THINK_AUTO : th;
+                        int st = spStyle.getSelectedItemPosition();
+                        e.style = (st >= 0 && st < EngineStore.STYLES.length)
+                                ? EngineStore.STYLES[st].id : EngineStore.CUSTOM_STYLE_ID;
+                        e.customPrompt = edCustomPrompt.getText().toString().trim();
                         e.url = edUrl.getText().toString().trim();
                         e.model = edModel.getText().toString().trim();
                         e.key = edKey.getText().toString().trim();
@@ -452,8 +396,8 @@ public class MainActivity extends Activity {
 
     // ---------- 测试 ----------
 
-    private String resolvePrompt() {
-        return store.promptTemplate().replace("{目标语言}",
+    private String resolvePrompt(Engine e) {
+        return EngineStore.promptFor(e).replace("{目标语言}",
                 EngineStore.langInstruction(store.targetLang()));
     }
 
@@ -470,7 +414,7 @@ public class MainActivity extends Activity {
         }
         tvTest.setTextColor(0xFF15181E);
         tvTest.setText("测试中… (" + e.name + ")");
-        runTest(e, resolvePrompt(), text, false);
+        runTest(e, resolvePrompt(e), text, false);
     }
 
     /** 单独测试某个引擎（用“测试翻译”框里的文字，空则用默认句子）。 */
@@ -483,7 +427,7 @@ public class MainActivity extends Activity {
         }
         tvTest.setTextColor(0xFF15181E);
         tvTest.setText("测试中… (" + e.name + " / " + e.model + ")");
-        runTest(e, resolvePrompt(), text, true);
+        runTest(e, resolvePrompt(e), text, true);
     }
 
     /** 流式测试：结果边收边显示，跟悬浮卡片同款效果。 */
@@ -539,6 +483,7 @@ public class MainActivity extends Activity {
         StringBuilder sb = new StringBuilder();
         sb.append("[").append(e.name);
         if (withModel && e.model.length() > 0) sb.append(" / ").append(e.model);
+        sb.append(" · ").append(EngineStore.styleName(e.style));
         if (ms > 0) sb.append(" · ").append(String.format(Locale.CHINA, "%.1fs", ms / 1000.0));
         sb.append("]\n");
         return sb.toString();

@@ -104,6 +104,7 @@ public class ProcessTextActivity extends Activity {
                 if (pos == lastTriggeredPos) return; // 忽略打开时系统自动触发的那一次
                 if (pos >= 0 && pos < engines.size()) store.setSelectedId(engines.get(pos).id);
                 updateThinkLabel();
+                syncStyleSpinner();
                 doTranslate();
             }
 
@@ -112,11 +113,11 @@ public class ProcessTextActivity extends Activity {
             }
         });
 
-        // ---------- 风格下拉（翻译风格预选） ----------
+        // ---------- 风格下拉（每个引擎各自的翻译风格） ----------
         ArrayAdapter<String> sa = new ArrayAdapter<String>(this, R.layout.item_spinner, EngineStore.styleLabels());
         sa.setDropDownViewResource(R.layout.item_spinner_dropdown);
         spStyle.setAdapter(sa);
-        int styleIdx = styleIndex();
+        int styleIdx = styleIndex(engines.isEmpty() ? null : engines.get(idx));
         spStyle.setSelection(styleIdx);
         lastStylePos = styleIdx;
         spStyle.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -124,8 +125,11 @@ public class ProcessTextActivity extends Activity {
             public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
                 if (pos == lastStylePos) return;
                 lastStylePos = pos;
-                store.applyStyle(pos >= 0 && pos < EngineStore.STYLES.length
-                        ? EngineStore.STYLES[pos].id : EngineStore.CUSTOM_STYLE_ID);
+                Engine e = currentEngine();
+                if (e == null) return;
+                e.style = pos >= 0 && pos < EngineStore.STYLES.length
+                        ? EngineStore.STYLES[pos].id : EngineStore.CUSTOM_STYLE_ID;
+                store.setEngineStyle(e.id, e.style);
                 doTranslate();
             }
 
@@ -138,9 +142,8 @@ public class ProcessTextActivity extends Activity {
         btnThink.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                int pos = spEngine.getSelectedItemPosition();
-                if (pos < 0 || pos >= engines.size()) return;
-                Engine cur = engines.get(pos);
+                Engine cur = currentEngine();
+                if (cur == null) return;
                 cur.think = cur.think == Engine.THINK_AUTO ? Engine.THINK_OFF
                         : (cur.think == Engine.THINK_OFF ? Engine.THINK_ON : Engine.THINK_AUTO);
                 store.setEngineThink(cur.id, cur.think);
@@ -216,21 +219,36 @@ public class ProcessTextActivity extends Activity {
 
     // ---------- 小工具 ----------
 
-    private int styleIndex() {
-        String id = store.styleId();
+    private int styleIndex(Engine e) {
+        String id = (e == null || e.style == null) ? "" : e.style;
         for (int i = 0; i < EngineStore.STYLES.length; i++) {
             if (EngineStore.STYLES[i].id.equals(id)) return i;
         }
-        return EngineStore.STYLES.length; // 自定义
+        return EngineStore.CUSTOM_STYLE_ID.equals(id) ? EngineStore.STYLES.length : 0; // 未知/空按“通用”
+    }
+
+    private Engine currentEngine() {
+        int pos = spEngine.getSelectedItemPosition();
+        if (pos < 0 || pos >= engines.size()) return null;
+        return engines.get(pos);
+    }
+
+    /** 切换引擎后，把风格下拉同步到该引擎自己的风格（不触发重译）。 */
+    private void syncStyleSpinner() {
+        Engine e = currentEngine();
+        int idx = styleIndex(e);
+        if (idx == spStyle.getSelectedItemPosition()) return;
+        lastStylePos = idx;
+        spStyle.setSelection(idx);
     }
 
     private void updateThinkLabel() {
-        int pos = spEngine.getSelectedItemPosition();
-        if (pos < 0 || pos >= engines.size()) {
+        Engine e = currentEngine();
+        if (e == null) {
             btnThink.setText("思考");
             return;
         }
-        btnThink.setText("思考：" + engines.get(pos).thinkName());
+        btnThink.setText("思考：" + e.thinkName());
     }
 
     private String langText() {
@@ -241,8 +259,10 @@ public class ProcessTextActivity extends Activity {
         return String.format(Locale.CHINA, "%.1fs", ms / 1000.0);
     }
 
-    /** 按“流式开关”发请求；两种方式都收敛到同一个 StreamCallback。 */
-    private void startTranslate(final Engine e, final String prompt, final TranslateClient.StreamCallback sink) {
+    /** 按“流式开关”发请求；提示词按“这个引擎自己的风格”解析。 */
+    private void startTranslate(final Engine e, final TranslateClient.StreamCallback sink) {
+        final String prompt = EngineStore.promptFor(e).replace("{目标语言}",
+                EngineStore.langInstruction(store.targetLang()));
         if (store.streamOn()) {
             TranslateClient.translateStreamAsync(e, prompt, source, store.timeoutSec(), sink);
         } else {
@@ -265,8 +285,6 @@ public class ProcessTextActivity extends Activity {
         final Engine cur = engines.get(pos);
         store.setSelectedId(cur.id);
 
-        final String prompt = store.promptTemplate().replace("{目标语言}",
-                EngineStore.langInstruction(store.targetLang()));
         final List<Engine> targets = store.multiMode() ? store.compareEngines() : null;
 
         btnRetry.setEnabled(false);
@@ -292,7 +310,7 @@ public class ProcessTextActivity extends Activity {
             tvDst.setText("…");
             tvStatus.setTextColor(0xFF9AA1AE);
             tvStatus.setText("正在用 " + e.name + " 翻译…");
-            startTranslate(e, prompt, new SingleSink(seq, e));
+            startTranslate(e, new SingleSink(seq, e));
             return;
         }
 
@@ -313,6 +331,8 @@ public class ProcessTextActivity extends Activity {
             col.setPadding(0, dp(8), 0, dp(8));
             TextView head = new TextView(this);
             head.setText(e.name + (e.model.length() > 0 ? "  ·  " + e.model : "") + "  ·  " + e.typeName()
+                    + (e.style == null || e.style.length() == 0 || "general".equals(e.style)
+                       ? "" : "  ·  " + EngineStore.styleName(e.style))
                     + (e.think == Engine.THINK_AUTO ? "" : "  ·  思考" + e.thinkName()));
             head.setTextSize(11);
             head.setTextColor(0xFF9AA1AE);
@@ -331,7 +351,7 @@ public class ProcessTextActivity extends Activity {
                 batch.done++;
                 continue;
             }
-            startTranslate(e, prompt, new MultiSink(batchSeq, e, body, batch));
+            startTranslate(e, new MultiSink(batchSeq, e, body, batch));
         }
         tvStatus.setTextColor(0xFF9AA1AE);
         tvStatus.setText(targets.size() + " 个引擎 · 已完成 " + batch.done + "/" + batch.total

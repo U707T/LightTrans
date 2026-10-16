@@ -24,7 +24,7 @@ public class EngineStore {
         }
     }
 
-    /** 自定义风格的 id（对应设置页里自己改的那段提示词）。 */
+    /** 自定义风格的 id（可选，一般人用不到）。 */
     public static final String CUSTOM_STYLE_ID = "custom";
 
     /** 内置翻译风格预选：通用 / 直译 / 地道 / 口语 / 正式 / 文学。 */
@@ -67,9 +67,6 @@ public class EngineStore {
                     + "3. 只输出译文本身，不要解释、不要加引号。"),
     };
 
-    /** 默认提示词 = “通用”风格。 */
-    public static final String DEFAULT_PROMPT = STYLES[0].prompt;
-
     public static final String[] LANGS = {
             "自动 (中↔英)", "中文", "English", "日本語", "한국어", "Français", "Deutsch", "Русский", "Español"
     };
@@ -88,7 +85,7 @@ public class EngineStore {
         return lang;
     }
 
-    // ---------------- 翻译风格 ----------------
+    // ---------------- 翻译风格（每个引擎各自的） ----------------
 
     public static Style styleById(String id) {
         for (int i = 0; i < STYLES.length; i++) {
@@ -105,41 +102,32 @@ public class EngineStore {
         return out;
     }
 
-    /** 当前选中的风格 id；旧版本没有这个键时，按旧提示词是否被改过判断“通用/自定义”。 */
-    public String styleId() {
-        if (!sp.contains("styleId")) {
-            String p = sp.getString("prompt", null);
-            return (p == null || p.equals(STYLES[0].prompt)) ? "general" : CUSTOM_STYLE_ID;
-        }
-        return sp.getString("styleId", "general");
-    }
-
-    public void setStyleId(String id) {
-        sp.edit().putString("styleId", id).apply();
-    }
-
-    /** 用户自己写的那段提示词（“自定义”风格）。 */
-    public String customPrompt() {
-        return sp.getString("prompt_custom", sp.getString("prompt", STYLES[0].prompt));
-    }
-
-    /** 切换到某个预选风格（CUSTOM_STYLE_ID 表示用自定义文本）；同时更新生效的提示词。 */
-    public void applyStyle(String id) {
+    /** 风格的显示名（空/未知都按“通用”）。 */
+    public static String styleName(String id) {
         Style s = styleById(id);
-        SharedPreferences.Editor ed = sp.edit();
-        ed.putString("styleId", s == null ? CUSTOM_STYLE_ID : id);
-        ed.putString("prompt", s != null ? s.prompt : customPrompt());
-        ed.apply();
+        if (s != null) return s.name;
+        return CUSTOM_STYLE_ID.equals(id) ? "自定义" : "通用";
     }
 
-    /** 当前生效的提示词模板。 */
-    public String promptTemplate() {
-        return sp.getString("prompt", STYLES[0].prompt);
+    /** 解析某个引擎实际使用的提示词模板（“自定义”留空时退回“通用”）。 */
+    public static String promptFor(Engine e) {
+        String sid = (e == null || e.style == null) ? "" : e.style;
+        if (CUSTOM_STYLE_ID.equals(sid)) {
+            String cp = e.customPrompt == null ? "" : e.customPrompt.trim();
+            if (cp.length() > 0) return cp;
+            return STYLES[0].prompt;
+        }
+        Style s = styleById(sid);
+        return s != null ? s.prompt : STYLES[0].prompt;
     }
 
-    /** 用户在编辑框里改提示词 = 变成“自定义”风格。 */
-    public void setPromptTemplate(String p) {
-        sp.edit().putString("prompt", p).putString("prompt_custom", p).putString("styleId", CUSTOM_STYLE_ID).apply();
+    /** 改某个引擎的翻译风格（悬浮卡片上的风格下拉会调它）。 */
+    public void setEngineStyle(String id, String style) {
+        List<Engine> list = engines();
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).id.equals(id)) list.get(i).style = style;
+        }
+        saveEngines(list);
     }
 
     // ---------------- 流式输出 ----------------
@@ -210,6 +198,29 @@ public class EngineStore {
                 changed = true;
                 if (selWasOpenai || selectedId().length() == 0) setSelectedId("pipi");
             }
+        }
+        // 一次性迁移：v3.2 及以前的“全局风格”改成“每个引擎各自的风格”
+        if (!sp.getBoolean("migrated_styles", false)) {
+            sp.edit().putBoolean("migrated_styles", true).apply();
+            String legacyStyle = sp.getString("styleId", null);
+            String legacyPrompt = sp.getString("prompt", null);
+            String fallback = "general";
+            if (styleById(legacyStyle) != null || CUSTOM_STYLE_ID.equals(legacyStyle)) {
+                fallback = legacyStyle;
+            } else if (legacyPrompt != null && legacyPrompt.length() > 0 && !legacyPrompt.equals(STYLES[0].prompt)) {
+                fallback = CUSTOM_STYLE_ID;
+            }
+            for (int i = 0; i < list.size(); i++) {
+                Engine e = list.get(i);
+                if (e.style == null || e.style.length() == 0) e.style = fallback;
+                if (CUSTOM_STYLE_ID.equals(e.style)
+                        && (e.customPrompt == null || e.customPrompt.length() == 0)
+                        && legacyPrompt != null && legacyPrompt.length() > 0) {
+                    e.customPrompt = legacyPrompt;
+                }
+            }
+            changed = true;
+            sp.edit().remove("styleId").remove("prompt").remove("prompt_custom").apply();
         }
         if (list.isEmpty()) {
             list.addAll(Engine.presets());
