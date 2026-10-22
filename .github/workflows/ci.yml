@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # 要拿 HEAD~1 的清单来比较版本号
 
       - name: JDK 17
         uses: actions/setup-java@v4
@@ -51,14 +53,17 @@ jobs:
       - name: 产物改名（Release 用 ASCII 文件名）
         run: cp dist/*.apk "LightTrans-v${{ steps.ver.outputs.version }}.apk"
 
-      - name: 同版本 tag 是否已存在（文档级提交不该重发同一版）
+      - name: 本次提交是否改了版本号（文档级提交不该重发同一版）
         id: rel
         run: |
-          if git ls-remote --exit-code --tags origin "refs/tags/v${{ steps.ver.outputs.version }}" > /dev/null 2>&1; then
+          BEFORE=$(git show HEAD~1:app/AndroidManifest.xml 2>/dev/null | grep -oP 'android:versionName="\K[^"]+' || true)
+          AFTER="${{ steps.ver.outputs.version }}"
+          if [ "$BEFORE" = "$AFTER" ]; then
             echo "needed=false" >> "$GITHUB_OUTPUT"
-            echo "v${{ steps.ver.outputs.version }} 已发布过，跳过 Release"
+            echo "版本仍是 $AFTER，跳过 Release"
           else
             echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "版本 $BEFORE → $AFTER，发布 Release"
           fi
 
       - name: 生成 Release 说明（取 CHANGELOG 顶部一段）
