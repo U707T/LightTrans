@@ -525,7 +525,7 @@ public class ProcessTextActivity extends Activity {
                 tvThink.setVisibility(View.VISIBLE);
                 tvThink.setText((finished ? "思考过程" : "思考中…") + "\n" + rea.toString());
             }
-            String t = finished ? ans.toString() : TextCleaner.cleanPartial(ans.toString());
+            String t = finished ? ans.toString() : TextCleaner.cleanPartial(ans.toString(), source);
             if (t.length() > 0) {
                 tvDst.setText(finished ? t : t + "▍");
                 result = t;

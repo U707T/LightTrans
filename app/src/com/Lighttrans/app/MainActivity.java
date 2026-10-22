@@ -538,7 +538,7 @@ public class MainActivity extends Activity {
                 long now = System.currentTimeMillis();
                 if (now - last[0] < 80) return;
                 last[0] = now;
-                tvTest.setText(head(e, withModel, 0) + TextCleaner.cleanPartial(tb.toString()) + "▍");
+                tvTest.setText(head(e, withModel, 0) + TextCleaner.cleanPartial(tb.toString(), text) + "▍");
             }
 
             @Override

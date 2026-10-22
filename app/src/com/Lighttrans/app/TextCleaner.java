@@ -55,17 +55,63 @@ final class TextCleaner {
      * 原文本身就是多段时不动，避免误删真正的译文。
      */
     static String clean(String s, String source) {
-        String out = clean(s);
-        int gap = out.lastIndexOf("\n\n");
-        if (gap < 0) return out;
-        if (source != null && source.indexOf("\n\n") >= 0) return out;
-        String tail = out.substring(gap + 2).trim();
-        if (!startsWithMeta(tail)) return out;
-        return out.substring(0, gap).trim();
+        return dropMetaParagraphs(clean(s), source);
+    }
+
+    /** 流式用：第一段一写完（出现空行）就能把“任务分析”剔掉，不用等整段结束 */
+    static String cleanPartial(String s, String source) {
+        return dropMetaParagraphs(cleanPartial(s), source);
+    }
+
+    /**
+     * 原文只有一段、译文却拆成多段时，把“分析/闲聊”段删掉。
+     * 原文本身就是多段就不动，避免误删真正的译文。
+     */
+    private static String dropMetaParagraphs(String out, String source) {
+        if (out == null || out.length() == 0) return "";
+        String src = source == null ? "" : source.trim();
+        if (src.indexOf("\n\n") >= 0 || out.indexOf("\n\n") < 0) return out;
+
+        String[] paras = out.split("\n\n");
+        StringBuilder keep = new StringBuilder();
+        for (int i = 0; i < paras.length; i++) {
+            String p = paras[i].trim();
+            if (p.length() == 0) continue;
+            if (isMetaParagraph(p, src)) continue;
+            if (keep.length() > 0) keep.append("\n\n");
+            keep.append(p);
+        }
+        if (keep.length() == 0) return out; // 全被判成分析：宁可原样留着
+        return keep.toString();
+    }
+
+    /**
+     * 判断某一段是不是“任务分析”而不是译文。
+     *
+     * 最硬的信号：这一段把原文原样引用了一遍（模型思考时爱复述原文），
+     * 真正的译文不会整段包含原文。其次是"我无法/若需/作为 AI"这类口吻。
+     */
+    private static boolean isMetaParagraph(String p, String src) {
+        String key = normalize(src);
+        if (key.length() >= 8 && normalize(p).indexOf(key) >= 0) return true;
+        return startsWithMeta(p);
+    }
+
+    /** 只保留字母/数字/汉字，忽略空白与标点，便于判断“这段是不是引用了原文”。 */
+    private static String normalize(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (Character.isLetterOrDigit(c)) sb.append(Character.toLowerCase(c));
+        }
+        return sb.toString();
     }
 
     private static final String[] META = {
-            "我无法", "我不能", "我没有", "作为 ai", "作为一个 ai", "我是一个", "若需", "需要我", "请提供", "请注意", "说明："
+            "我无法确认", "我无法核实", "我无法判断", "我无法查看", "我无法访问",
+            "作为 ai", "作为一个 ai", "我是一个人工智能", "我是一个语言模型",
+            "若需我", "需要我核查", "如需我", "请提供更多", "请提供来源", "请提供具体"
     };
 
     private static boolean startsWithMeta(String t) {

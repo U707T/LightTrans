@@ -67,7 +67,31 @@ public final class TextCleanerTest {
                 srcOne,
                 "第一段译文。\n\n第二段译文。");
 
-        // 11. 不能误伤
+        // 11. 第一段是“任务分析”并复述了原文（皮的常见形态）
+        eqs("分析段在前 + 译文在后",
+                "[T] — 待翻译内容仅为一句英文：\"Let me write a concise summary with the before/after.\"，需要将其翻译为中文，并保持书面语风格。\n\n让我撰写一份简洁的总结，包含修改前后的对比。",
+                "Let me write a concise summary with the before/after.",
+                "让我撰写一份简洁的总结，包含修改前后的对比。");
+        eqs("分析段含标点差异也能认出",
+                "需要翻译的原文是 Let me write a concise summary with the before/after 这句话，要求书面语。\n\n让我写一份简洁的总结，附上修改前后的对比。",
+                "Let me write a concise summary with the before/after.",
+                "让我写一份简洁的总结，附上修改前后的对比。");
+        eqs("两段都是译文（没引用原文）不动",
+                "第一段译文。\n\n第二段译文。",
+                "Some single paragraph source text.",
+                "第一段译文。\n\n第二段译文。");
+        eqs("短原文（<8 字）不做引用判断",
+                "Keep it short.\n\n保持简短。",
+                "Keep it.",
+                "Keep it short.\n\n保持简短。");
+
+        // 12. 流式：分析段一写完就消失
+        eqsp("流式：分析段被实时剔除",
+                "[T] — 待翻译内容仅为一句英文：\"Let me write a concise summary with the before/after.\"，需要译为中文。\n\n让我",
+                "Let me write a concise summary with the before/after.",
+                "让我");
+
+        // 13. 不能误伤
         eq("首行含冒号但是正常译文", "他说：\n今天天气很好。", "他说：\n今天天气很好。");
         eq("单行以注开头", "注：这里指的是天气。", "注：这里指的是天气。");
         eq("译文里本来就有引号", "他说“你好”。", "他说“你好”。");
@@ -78,6 +102,17 @@ public final class TextCleanerTest {
                 ? "全部通过：" + passed + " 项"
                 : "失败 " + failed + " 项（通过 " + passed + " 项）");
         if (failed != 0) System.exit(1);
+    }
+
+    private static void eqsp(String name, String input, String source, String expect) {
+        String got = TextCleaner.cleanPartial(input, source);
+        if (expect.equals(got)) {
+            passed++;
+            System.out.println("  ok  " + name);
+        } else {
+            failed++;
+            System.out.println("  FAIL " + name + "\n      得到 [" + got + "]\n      期望 [" + expect + "]");
+        }
     }
 
     private static void eqs(String name, String input, String source, String expect) {
