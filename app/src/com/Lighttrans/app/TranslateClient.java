@@ -310,7 +310,7 @@ public class TranslateClient {
         }
         JSONObject c0 = choices.optJSONObject(0);
         JSONObject msg = c0 == null ? null : c0.optJSONObject("message");
-        return clean(contentOf(msg));
+        return TextCleaner.clean(contentOf(msg));
     }
 
     private static JSONObject message(String role, String content) throws Exception {
@@ -388,7 +388,7 @@ public class TranslateClient {
                 }
             }
         }
-        return clean(sb.toString());
+        return TextCleaner.clean(sb.toString());
     }
 
     private static JSONObject anthropicBody(Engine e, String prompt, String text, boolean stream, int think) throws Exception {
@@ -420,7 +420,7 @@ public class TranslateClient {
                 return geminiBody(e, prompt, text, think);
             }
         });
-        return clean(geminiText(resp));
+        return TextCleaner.clean(geminiText(resp));
     }
 
     private static JSONObject geminiBody(Engine e, String prompt, String text, int think) throws Exception {
@@ -758,16 +758,6 @@ public class TranslateClient {
             if (s.contains(keys[i])) return true;
         }
         return false;
-    }
-
-    /**
-     * 去掉思考型模型输出的思维链，只留下译文。
-     * 非流式直接在这里剥；流式由 UI 在收尾时对整段调用一次（见 BaseSink.onDone）。
-     */
-    static String clean(String s) {
-        if (s == null) return "";
-        s = s.replaceAll("(?s)<(think|thinking|reasoning)>.*?</\\1>", "");
-        return s.trim();
     }
 
     public static String friendly(Throwable t) {

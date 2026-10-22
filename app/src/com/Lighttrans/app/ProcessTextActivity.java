@@ -477,6 +477,8 @@ public class ProcessTextActivity extends Activity {
 
         @Override
         public final void onReasoning(String d) {
+            // 只有用户显式把「思考」开到“开启”时才展示；否则模型自带的思考过程一律不显示
+            if (eng.think != Engine.THINK_ON) return;
             rea.append(d);
             maybeFlush(false);
         }
@@ -486,9 +488,9 @@ public class ProcessTextActivity extends Activity {
             if (reqSeq != seq) return;
             store.flushEngineFlags(eng);
             if (error == null && ans.length() == 0 && full != null && full.length() > 0) ans.append(full);
-            // 有些代理会把  thinking 直接塞进正文：收尾时统一剥一次，别把裸标签留在界面上
-            if (ans.indexOf("<think") >= 0 || ans.indexOf("<reasoning>") >= 0) {
-                String cleaned = TranslateClient.clean(ans.toString());
+            // 收尾统一清洗：开场白 / 引号 / 代码块 / 思维链标签 / 结尾说明 全部剥掉
+            String cleaned = TextCleaner.clean(ans.toString());
+            if (!cleaned.equals(ans.toString())) {
                 ans.setLength(0);
                 ans.append(cleaned);
             }
@@ -522,7 +524,7 @@ public class ProcessTextActivity extends Activity {
                 tvThink.setVisibility(View.VISIBLE);
                 tvThink.setText((finished ? "思考过程" : "思考中…") + "\n" + rea.toString());
             }
-            String t = ans.toString();
+            String t = finished ? ans.toString() : TextCleaner.cleanPartial(ans.toString());
             if (t.length() > 0) {
                 tvDst.setText(finished ? t : t + "▍");
                 result = t;
@@ -565,7 +567,7 @@ public class ProcessTextActivity extends Activity {
         @Override
         void render(boolean finished) {
             if (reqSeq != seq) return;
-            String t = ans.toString();
+            String t = finished ? ans.toString() : TextCleaner.cleanPartial(ans.toString());
             res.text = t;
             if (t.length() > 0) {
                 body.setTextColor(getColor(R.color.text_main));

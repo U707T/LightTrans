@@ -538,12 +538,12 @@ public class MainActivity extends Activity {
                 long now = System.currentTimeMillis();
                 if (now - last[0] < 80) return;
                 last[0] = now;
-                tvTest.setText(head(e, withModel, 0) + tb + "▍");
+                tvTest.setText(head(e, withModel, 0) + TextCleaner.cleanPartial(tb.toString()) + "▍");
             }
 
             @Override
             public void onReasoning(String d) {
-                if (seq != testSeq) return;
+                if (seq != testSeq || e.think != Engine.THINK_ON) return;
                 if (tb.length() == 0 && !thinking[0]) {
                     thinking[0] = true;
                     tvTest.setText("模型思考中…");
@@ -564,7 +564,8 @@ public class MainActivity extends Activity {
                 } else {
                     if (tb.length() == 0 && full != null) tb.append(full);
                     tvTest.setTextColor(getColor(R.color.text_main));
-                    tvTest.setText(head(e, withModel, System.currentTimeMillis() - start) + tb);
+                    tvTest.setText(head(e, withModel, System.currentTimeMillis() - start)
+                            + TextCleaner.clean(tb.toString()));
                 }
             }
         };

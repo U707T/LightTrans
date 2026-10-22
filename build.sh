@@ -21,10 +21,13 @@ if [ "${1:-}" = "test" ]; then
   javac -encoding UTF-8 -d "$OUT/test" \
     app/src/com/Lighttrans/app/SseParser.java \
     app/src/com/Lighttrans/app/Prompts.java \
+    app/src/com/Lighttrans/app/TextCleaner.java \
     test/com/Lighttrans/app/SseParserTest.java \
-    test/com/Lighttrans/app/PromptsTest.java
+    test/com/Lighttrans/app/PromptsTest.java \
+    test/com/Lighttrans/app/TextCleanerTest.java
   java -cp "$OUT/test" com.Lighttrans.app.SseParserTest
   java -cp "$OUT/test" com.Lighttrans.app.PromptsTest
+  java -cp "$OUT/test" com.Lighttrans.app.TextCleanerTest
   exit 0
 fi
 
