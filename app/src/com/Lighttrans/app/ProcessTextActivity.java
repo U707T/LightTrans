@@ -62,10 +62,11 @@ public class ProcessTextActivity extends Activity {
         store = new EngineStore(this);
 
         Window win = getWindow();
-        applyWindowWidth(win);
         win.setBackgroundDrawable(new ColorDrawable(0x00000000));
 
         setContentView(R.layout.activity_process_text);
+        // 必须在 setContentView 之后：之前调用会被 generateLayout() 重置成 WRAP_CONTENT
+        applyWindowWidth(win);
 
         tvSrc = (TextView) findViewById(R.id.tvSrc);
         tvSrcToggle = (TextView) findViewById(R.id.tvSrcToggle);

@@ -23,6 +23,11 @@
         <item name="android:backgroundDimEnabled">false</item>
         <item name="android:windowCloseOnTouchOutside">true</item>
         <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+        <!-- 卡片宽度：这两行不能删。
+             只靠代码里的 setLayout() 不够——它在 setContentView() 之前调用，
+             会被 PhoneWindow.generateLayout() 重置回 WRAP_CONTENT，卡片会缩成一条细长条。 -->
+        <item name="android:windowMinWidthMajor">94%</item>
+        <item name="android:windowMinWidthMinor">94%</item>
     </style>
 
     <!-- ===== 小部件通用样式 ===== -->
