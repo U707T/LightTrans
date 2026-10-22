@@ -565,7 +565,7 @@ public class MainActivity extends Activity {
                     if (tb.length() == 0 && full != null) tb.append(full);
                     tvTest.setTextColor(getColor(R.color.text_main));
                     tvTest.setText(head(e, withModel, System.currentTimeMillis() - start)
-                            + TextCleaner.clean(tb.toString()));
+                            + TextCleaner.clean(tb.toString(), text));
                 }
             }
         };

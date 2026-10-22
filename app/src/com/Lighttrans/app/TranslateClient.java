@@ -310,7 +310,7 @@ public class TranslateClient {
         }
         JSONObject c0 = choices.optJSONObject(0);
         JSONObject msg = c0 == null ? null : c0.optJSONObject("message");
-        return TextCleaner.clean(contentOf(msg));
+        return TextCleaner.clean(contentOf(msg), text);
     }
 
     private static JSONObject message(String role, String content) throws Exception {
@@ -388,7 +388,7 @@ public class TranslateClient {
                 }
             }
         }
-        return TextCleaner.clean(sb.toString());
+        return TextCleaner.clean(sb.toString(), text);
     }
 
     private static JSONObject anthropicBody(Engine e, String prompt, String text, boolean stream, int think) throws Exception {
@@ -420,7 +420,7 @@ public class TranslateClient {
                 return geminiBody(e, prompt, text, think);
             }
         });
-        return TextCleaner.clean(geminiText(resp));
+        return TextCleaner.clean(geminiText(resp), text);
     }
 
     private static JSONObject geminiBody(Engine e, String prompt, String text, int think) throws Exception {

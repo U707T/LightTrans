@@ -38,10 +38,65 @@ final class TextCleaner {
         s = s.replaceAll("(?s)<(think|thinking|reasoning)>.*?</\\1>", "");
         s = stripFence(s.trim());
         s = stripPreamble(s);
+        s = stripInlineLabel(s);
         s = stripLabel(s.trim());
         s = stripQuotes(s.trim());
         s = stripTail(s);
         return s.trim();
+    }
+
+    /**
+     * 带原文的清洗：如果原文只有一段，而译文多出一段、且那一段像 AI 在说话，
+     * 就把它当“聊天天回复”删掉。
+     *
+     * 例：原文 "I can verify the source is correct..."（一段）
+     *     译文 "验证来源正确……\n\n我无法确认“来源正确”这一论断……请提供构建记录。"
+     *     → 只保留第一段。
+     * 原文本身就是多段时不动，避免误删真正的译文。
+     */
+    static String clean(String s, String source) {
+        String out = clean(s);
+        int gap = out.lastIndexOf("\n\n");
+        if (gap < 0) return out;
+        if (source != null && source.indexOf("\n\n") >= 0) return out;
+        String tail = out.substring(gap + 2).trim();
+        if (!startsWithMeta(tail)) return out;
+        return out.substring(0, gap).trim();
+    }
+
+    private static final String[] META = {
+            "我无法", "我不能", "我没有", "作为 ai", "作为一个 ai", "我是一个", "若需", "需要我", "请提供", "请注意", "说明："
+    };
+
+    private static boolean startsWithMeta(String t) {
+        String low = t.toLowerCase();
+        for (int i = 0; i < META.length; i++) {
+            if (low.startsWith(META[i])) return true;
+        }
+        return false;
+    }
+
+    private static final String[] INLINE_LABELS = {
+            "译文：", "译文:", "翻译：", "翻译:", "Translation:", "translation:"
+    };
+
+    private static final String PUNCT = "。！？，、；：“”‘’「」『』()（）《》";
+
+    /** “xxx译文：”这种行内前缀：冒号前 ≤12 个字符且不含标点，就砍到冒号后面 */
+    private static String stripInlineLabel(String s) {
+        for (int i = 0; i < INLINE_LABELS.length; i++) {
+            String lab = INLINE_LABELS[i];
+            int at = s.indexOf(lab);
+            if (at > 0 && at <= 12) {
+                String head = s.substring(0, at);
+                boolean punct = false;
+                for (int j = 0; j < PUNCT.length(); j++) {
+                    if (head.indexOf(PUNCT.charAt(j)) >= 0) punct = true;
+                }
+                if (!punct) return s.substring(at + lab.length()).trim();
+            }
+        }
+        return s;
     }
 
     /**
@@ -56,7 +111,8 @@ final class TextCleaner {
         if (t >= 0) s = s.substring(0, t);
         s = s.replaceAll("(?s)<(think|thinking|reasoning)>.*?</\\1>", "");
         s = stripFence(s);
-        return stripPreamble(s);
+        s = stripPreamble(s);
+        return stripInlineLabel(s);
     }
 
     /** ```lang ... ``` 整段包裹时取里面 */

@@ -47,7 +47,27 @@ public final class TextCleanerTest {
         eqp("流式：未闭合的 think", "<think>先想一下", "");
         eqp("流式：围栏先藏", "```\n今天", "今天");
 
-        // 9. 不能误伤
+        // 9. 行内前缀（"[Y]一译文：…" 这种）
+        eq("行内译文前缀", "[Y]一译文：验证来源正确。", "验证来源正确。");
+        eq("行内前缀带标点不处理", "他说：“译文：你好”", "他说：“译文：你好”");
+
+        // 10. 按原文段落数判断“多出来的那一段是不是 AI 在说话”
+        String srcOne = "I can verify the source is correct (it is) and that the build includes it.";
+        String srcTwo = "First paragraph.\n\nSecond paragraph.";
+        eqs("单段原文 + AI 尾巴",
+                "验证来源正确，并且构建已包含该来源。\n\n我无法确认“来源正确”这一论断本身，请提供来源标识与构建记录。",
+                srcOne,
+                "验证来源正确，并且构建已包含该来源。");
+        eqs("原文本身两段：不动",
+                "第一段译文。\n\n第二段译文。",
+                srcTwo,
+                "第一段译文。\n\n第二段译文。");
+        eqs("多出来的段落不像 AI：不动",
+                "第一段译文。\n\n第二段译文。",
+                srcOne,
+                "第一段译文。\n\n第二段译文。");
+
+        // 11. 不能误伤
         eq("首行含冒号但是正常译文", "他说：\n今天天气很好。", "他说：\n今天天气很好。");
         eq("单行以注开头", "注：这里指的是天气。", "注：这里指的是天气。");
         eq("译文里本来就有引号", "他说“你好”。", "他说“你好”。");
@@ -58,6 +78,17 @@ public final class TextCleanerTest {
                 ? "全部通过：" + passed + " 项"
                 : "失败 " + failed + " 项（通过 " + passed + " 项）");
         if (failed != 0) System.exit(1);
+    }
+
+    private static void eqs(String name, String input, String source, String expect) {
+        String got = TextCleaner.clean(input, source);
+        if (expect.equals(got)) {
+            passed++;
+            System.out.println("  ok  " + name);
+        } else {
+            failed++;
+            System.out.println("  FAIL " + name + "\n      得到 [" + got + "]\n      期望 [" + expect + "]");
+        }
     }
 
     private static void eqp(String name, String input, String expect) {

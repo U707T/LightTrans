@@ -490,7 +490,7 @@ public class ProcessTextActivity extends Activity {
             store.flushEngineFlags(eng);
             if (error == null && ans.length() == 0 && full != null && full.length() > 0) ans.append(full);
             // 收尾统一清洗：开场白 / 引号 / 代码块 / 思维链标签 / 结尾说明 全部剥掉
-            String cleaned = TextCleaner.clean(ans.toString());
+            String cleaned = TextCleaner.clean(ans.toString(), source);
             if (!cleaned.equals(ans.toString())) {
                 ans.setLength(0);
                 ans.append(cleaned);
