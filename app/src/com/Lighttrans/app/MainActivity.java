@@ -484,8 +484,7 @@ public class MainActivity extends Activity {
     // ---------- 测试 ----------
 
     private String resolvePrompt(Engine e) {
-        return Prompts.promptFor(e).replace("{目标语言}",
-                Prompts.langInstruction(store.targetLang()));
+        return Prompts.buildPrompt(e.style, e.customPrompt, store.targetLang());
     }
 
     private void test() {

@@ -31,37 +31,42 @@ public final class Prompts {
                     + "要求：\n"
                     + "1. 只输出译文本身，不要解释、不要加引号、不要输出“译文：”这样的前缀；\n"
                     + "2. 保留原文的换行、段落与格式，专业术语前后一致；\n"
-                    + "3. 如果原文已经是目标语言，就翻译成英文。"),
+                    + "3. 如果原文已经是{目标语言}，就原样输出，不要换成别的语言。"),
             new Style("literal", "直译",
                     "你是一个专业的翻译引擎，请把用户输入的文本逐句直译成{目标语言}。\n"
                     + "要求：\n"
                     + "1. 忠实原文的结构与语序，逐句对应，不增删、不省略、不发挥；\n"
                     + "2. 保留原文的换行、段落与格式，专业术语前后一致；\n"
-                    + "3. 只输出译文本身，不要解释、不要加引号。"),
+                    + "3. 只输出译文本身，不要解释、不要加引号；\n"
+                    + "4. 如果原文已经是{目标语言}，就原样输出，不要换成别的语言。"),
             new Style("natural", "地道",
                     "你是一名母语级译者，请把用户输入的文本翻译成{目标语言}。\n"
                     + "要求：\n"
                     + "1. 译文要自然地道，读起来像目标语言的母语者写的一样，摆脱“翻译腔”；\n"
                     + "2. 保留原文的换行、段落与格式，语气与原文一致；\n"
-                    + "3. 只输出译文本身，不要解释、不要加引号。"),
+                    + "3. 只输出译文本身，不要解释、不要加引号；\n"
+                    + "4. 如果原文已经是{目标语言}，就原样输出，不要换成别的语言。"),
             new Style("casual", "口语",
                     "请把用户输入的文本翻译成{目标语言}。\n"
                     + "要求：\n"
                     + "1. 用轻松、口语化的语气，像日常聊天一样自然；\n"
                     + "2. 保留原文的换行与段落；\n"
-                    + "3. 只输出译文本身，不要解释、不要加引号。"),
+                    + "3. 只输出译文本身，不要解释、不要加引号；\n"
+                    + "4. 如果原文已经是{目标语言}，就原样输出，不要换成别的语言。"),
             new Style("formal", "正式",
                     "你是一名专业译者，请把用户输入的文本翻译成{目标语言}。\n"
                     + "要求：\n"
                     + "1. 使用正式、严谨的书面语，措辞专业（适合商务、公文、学术场景）；\n"
                     + "2. 术语准确、前后一致，保留原文的换行与格式；\n"
-                    + "3. 只输出译文本身，不要解释、不要加引号。"),
+                    + "3. 只输出译文本身，不要解释、不要加引号；\n"
+                    + "4. 如果原文已经是{目标语言}，就原样输出，不要换成别的语言。"),
             new Style("literary", "文学",
                     "你是一名文学译者，请把用户输入的文本翻译成{目标语言}。\n"
                     + "要求：\n"
                     + "1. 讲究文采与语感，可以适度意译、润色，让译文优美流畅；\n"
                     + "2. 保留原文的段落与格式，尽力传达原文的情绪与风格；\n"
-                    + "3. 只输出译文本身，不要解释、不要加引号。"),
+                    + "3. 只输出译文本身，不要解释、不要加引号；\n"
+                    + "4. 如果原文已经是{目标语言}，就原样输出，不要换成别的语言。"),
     };
 
     /** “自动”语言：原文是中文就翻成英文，其它语言都翻成中文。 */
@@ -74,7 +79,7 @@ public final class Prompts {
 
     /** 语言的显示名（只用于界面，与 LANG_IDS 一一对应）。 */
     public static final String[] LANG_LABELS = {
-            "自动 (中↔英)", "中文", "English", "日本語", "한국어", "Français", "Deutsch", "Русский", "Español"
+            "自动（外语→中文）", "中文", "English", "日本語", "한국어", "Français", "Deutsch", "Русский", "Español"
     };
 
     private Prompts() {
@@ -83,7 +88,9 @@ public final class Prompts {
     /** 把语言 id 翻译成给 AI 的指令。未知 id 原样返回（兼容旧版本存下来的显示名）。 */
     public static String langInstruction(String langId) {
         if (langId == null || langId.length() == 0 || LANG_AUTO.equals(langId)) {
-            return "中文或英文（原文是中文就翻译成英文，其它语言的原文都翻译成中文）";
+            // 默认 = 外语译中：目标就是「中文」；原文本来就是中文时，
+            // 由风格模板里的「已经是目标语言就原样输出」那条兜住，不会再翻成英文。
+            return "中文";
         }
         return langLabel(langId);
     }
@@ -129,15 +136,32 @@ public final class Prompts {
         return CUSTOM_STYLE_ID.equals(id) ? "自定义" : "通用";
     }
 
+    /**
+     * 拼出最终提示词：模板 + 目标语言。
+     *
+     * 自定义提示词如果忘了写 {目标语言}，以前 replace() 静默无效——目标语言设置直接蒸发。
+     * 这里兜底把语言追加到末尾，保证“翻译模式”永远生效。
+     */
+    public static String buildPrompt(String styleId, String customPrompt, String langId) {
+        String tpl = promptFor(styleId, customPrompt);
+        String instr = langInstruction(langId);
+        if (tpl.indexOf("{目标语言}") >= 0) return tpl.replace("{目标语言}", instr);
+        return tpl + "\n\n目标语言：" + instr;
+    }
+
+    /** 界面上显示用的短标签（不要把整句指令塞进状态栏）。 */
+    public static String langShort(String langId) {
+        if (langId == null || langId.length() == 0 || LANG_AUTO.equals(langId)) return "外语→中文";
+        return langLabel(langId);
+    }
+
     /** 解析某个引擎实际使用的提示词模板（“自定义”留空时退回“通用”）。 */
-    public static String promptFor(Engine e) {
-        String sid = (e == null || e.style == null) ? "" : e.style;
-        if (CUSTOM_STYLE_ID.equals(sid)) {
-            String cp = e.customPrompt == null ? "" : e.customPrompt.trim();
-            if (cp.length() > 0) return cp;
-            return STYLES[0].prompt;
+    public static String promptFor(String styleId, String customPrompt) {
+        if (CUSTOM_STYLE_ID.equals(styleId)) {
+            String cp = customPrompt == null ? "" : customPrompt.trim();
+            return cp.length() > 0 ? cp : STYLES[0].prompt;
         }
-        Style s = styleById(sid);
+        Style s = styleById(styleId);
         return s != null ? s.prompt : STYLES[0].prompt;
     }
 }

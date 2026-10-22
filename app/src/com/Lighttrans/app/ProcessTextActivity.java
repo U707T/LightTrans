@@ -301,7 +301,7 @@ public class ProcessTextActivity extends Activity {
     }
 
     private String langText() {
-        return Prompts.langInstruction(store.targetLang());
+        return Prompts.langShort(store.targetLang());
     }
 
     private static String secs(long ms) {
@@ -326,7 +326,7 @@ public class ProcessTextActivity extends Activity {
 
     /** 按“流式开关”发请求；提示词按“这个引擎自己的风格”解析。返回的句柄用于取消。 */
     private TranslateClient.Cancel startTranslate(final Engine e, final TranslateClient.StreamCallback sink) {
-        String prompt = Prompts.promptFor(e).replace("{目标语言}", Prompts.langInstruction(store.targetLang()));
+        String prompt = Prompts.buildPrompt(e.style, e.customPrompt, store.targetLang());
         TranslateClient.Cancel c;
         if (store.streamOn()) {
             c = TranslateClient.translateStreamAsync(e, prompt, source, TranslateClient.TIMEOUT_SEC, sink);

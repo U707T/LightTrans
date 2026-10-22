@@ -20,8 +20,11 @@ if [ "${1:-}" = "test" ]; then
   mkdir -p "$OUT/test"
   javac -encoding UTF-8 -d "$OUT/test" \
     app/src/com/Lighttrans/app/SseParser.java \
-    test/com/Lighttrans/app/SseParserTest.java
+    app/src/com/Lighttrans/app/Prompts.java \
+    test/com/Lighttrans/app/SseParserTest.java \
+    test/com/Lighttrans/app/PromptsTest.java
   java -cp "$OUT/test" com.Lighttrans.app.SseParserTest
+  java -cp "$OUT/test" com.Lighttrans.app.PromptsTest
   exit 0
 fi
 
