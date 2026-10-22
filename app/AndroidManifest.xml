@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.Lighttrans.app"
-    android:versionCode="21"
-    android:versionName="3.4">
+    android:versionCode="22"
+    android:versionName="3.5">
 
     <!-- 只需要联网(普通权限，安装即授予，不会弹窗)。
          不需要悬浮窗(SYSTEM_ALERT_WINDOW)、无障碍、通知、后台服务等任何敏感权限。 -->
@@ -21,12 +21,18 @@
         </intent>
     </queries>
 
+    <!-- 说人话：接口地址是用户自己填的，本地 Ollama / 局域网网关基本都是 http。
+         Android 9 起默认禁止明文 HTTP，不显式允许的话这些引擎会直接抛
+         "CLEARTEXT communication ... not permitted"，等于本地翻译功能完全不可用。 -->
     <application
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.LightTrans.Main">
+        android:theme="@style/Theme.LightTrans.Main"
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"

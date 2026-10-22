@@ -48,7 +48,8 @@
             <Spinner
                 android:id="@+id/spLang"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:popupBackground="@drawable/bg_popup" />
 
             <CheckBox
                 android:id="@+id/cbStream"
@@ -57,6 +58,16 @@
                 android:layout_marginTop="8dp"
                 android:buttonTint="@color/primary"
                 android:text="流式输出（打字机效果，服务不支持时自动回退）"
+                android:textColor="@color/text_main"
+                android:textSize="13sp" />
+
+            <CheckBox
+                android:id="@+id/cbMulti"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:buttonTint="@color/primary"
+                android:text="多引擎对比（同时请求多个引擎）"
                 android:textColor="@color/text_main"
                 android:textSize="13sp" />
         </LinearLayout>
@@ -93,19 +104,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="选中文本时用哪个引擎；点「编辑」可以给每个引擎单独设置翻译风格、思考模式，勾「参与对比」可同时看多家结果。"
+                android:text="选中文本时用哪个引擎。点一行进编辑；右侧「⋯」可以单独测试、切换参与对比、删除。"
                 android:textColor="@color/text_hint"
                 android:textSize="11sp" />
-
-            <CheckBox
-                android:id="@+id/cbMulti"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:buttonTint="@color/primary"
-                android:text="多引擎对比（同时请求多个引擎）"
-                android:textColor="@color/text_main"
-                android:textSize="13sp" />
 
             <LinearLayout
                 android:id="@+id/boxEngines"
@@ -184,6 +185,15 @@
                 android:textSize="12sp"
                 android:text="· 权限：只有 INTERNET(普通权限，安装即授予，不弹窗) —— 悬浮窗/通知/无障碍全都不需要。\n· 三种入口：① 选中文字 → 点菜单里的「轻译」；② 选中 → 分享 →「轻译」；③ 浏览器的翻译图标（ACTION_TRANSLATE 通道）。\n· 原理：文本框的菜单项 = android.intent.action.PROCESS_TEXT；本应用以半透明对话框 Activity 的形式叠加在当前界面之上，看起来像悬浮窗，却不需要任何权限。\n· 菜单里看不到「轻译」时：点多选菜单右侧的 ⋮ 或「更多」，部分系统会把它收进二级菜单；网页里请走「分享」。\n· API Key 只保存在本机 SharedPreferences，请求直达你配置的引擎。\n· 翻译风格与思考模式都是每个引擎各自的设置（「编辑」里改）；悬浮卡片上也能随手切换。" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvVersion"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center"
+            android:textColor="@color/text_hint"
+            android:textSize="11sp" />
 
     </LinearLayout>
 </ScrollView>

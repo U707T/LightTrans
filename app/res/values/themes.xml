@@ -2,18 +2,27 @@
 <resources>
     <style name="Theme.LightTrans.Main" parent="@android:style/Theme.DeviceDefault.Light">
         <item name="android:windowBackground">@color/bg_page</item>
+        <!-- 配色是写死的浅色：别让系统“强制深色”把它反转 -->
+        <item name="android:forceDarkAllowed">false</item>
+        <!-- Android 15+ 强制 edge-to-edge，statusBarColor 会被忽略，靠 light 标志决定图标黑白。
+             不声明的话目标是「白图标压在 #F5F7FB 上」= 看不见。 -->
+        <item name="android:statusBarColor">@color/bg_page</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/bg_page</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 
-    <!-- 悬浮卡片主题：透明、无标题、不遮暗背景、点外部关闭 -->
-    <style name="Theme.LightTrans.Float" parent="@android:style/Theme.DeviceDefault.Dialog">
+    <!-- 悬浮卡片主题：透明、无标题、不遮暗背景、点外部关闭。
+         必须是 .Light：之前继承的是深色的 Theme.DeviceDefault.Dialog，
+         深色模式下 Spinner 弹出面板是黑的，而下拉文字是写死的近黑 #15181E —— 整个下拉一片黑。 -->
+    <style name="Theme.LightTrans.Float" parent="@android:style/Theme.DeviceDefault.Light.Dialog">
+        <item name="android:forceDarkAllowed">false</item>
         <item name="android:windowIsFloating">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:backgroundDimEnabled">false</item>
         <item name="android:windowCloseOnTouchOutside">true</item>
         <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
-        <item name="android:windowMinWidthMajor">92%</item>
-        <item name="android:windowMinWidthMinor">92%</item>
     </style>
 
     <!-- ===== 小部件通用样式 ===== -->
@@ -51,6 +60,9 @@
 
     <style name="Btn.Small">
         <item name="android:textSize">12sp</item>
+        <!-- 原来只有 ~24dp 高，手指点不准；40dp 是不改观感前提下能做到的最大值 -->
+        <item name="android:minHeight">40dp</item>
+        <item name="android:gravity">center</item>
         <item name="android:paddingStart">12dp</item>
         <item name="android:paddingEnd">12dp</item>
         <item name="android:paddingTop">5dp</item>

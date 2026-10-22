@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ 的备份/迁移规则：不要把带 API Key 的 lighttrans.xml 带出去 -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="lighttrans.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="lighttrans.xml" />
+    </device-transfer>
+</data-extraction-rules>

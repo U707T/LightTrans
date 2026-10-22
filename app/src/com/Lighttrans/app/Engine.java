@@ -33,7 +33,7 @@ public class Engine {
     public int think = THINK_OFF;
     /** 这个引擎认不认思考参数：被服务商拒过一次后置 false，之后直接跳过参数（省一次往返）。 */
     public boolean thinkParamOk = true;
-    /** 这个引擎用的翻译风格 id（EngineStore.STYLES 里的 id 或 CUSTOM_STYLE_ID）；空 = 通用。 */
+    /** 这个引擎用的翻译风格 id（Prompts.STYLES 里的 id 或 CUSTOM_STYLE_ID）；空 = 通用。 */
     public String style = "";
     /** 风格选「自定义」时使用的提示词（一般人用不到）。 */
     public String customPrompt = "";

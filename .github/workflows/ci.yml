@@ -51,10 +51,21 @@ jobs:
       - name: 产物改名（Release 用 ASCII 文件名）
         run: cp dist/*.apk "LightTrans-v${{ steps.ver.outputs.version }}.apk"
 
+      - name: 同版本 tag 是否已存在（文档级提交不该重发同一版）
+        id: rel
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v${{ steps.ver.outputs.version }}" > /dev/null 2>&1; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "v${{ steps.ver.outputs.version }} 已发布过，跳过 Release"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: 生成 Release 说明（取 CHANGELOG 顶部一段）
         run: awk '/^## /{n++} n==1{print} n>=2{exit}' CHANGELOG.md > RELEASE_NOTES.md || true
 
       - name: 发布 Release
+        if: steps.rel.outputs.needed == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.version }}

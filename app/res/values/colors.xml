@@ -5,9 +5,15 @@
     <color name="primary_soft">#EAF0FF</color>
     <color name="bg_page">#F5F7FB</color>
     <color name="surface">#FFFFFF</color>
+    <color name="surface_row">#F8FAFD</color>
+    <color name="surface_input">#F3F5F9</color>
+    <color name="surface_muted">#F1F3F7</color>
+    <color name="surface_btn_plain">#EEF1F6</color>
     <color name="text_main">#15181E</color>
     <color name="text_sub">#5F6673</color>
-    <color name="text_hint">#9AA1AE</color>
+    <!-- 11-12sp 的提示文字：原来是 #9AA1AE，白底对比度只有 2.6:1，强光下读不出来。
+         现在是 4.8:1，仍明显弱于主文字，不会抢焦点。 -->
+    <color name="text_hint">#6B7280</color>
     <color name="divider">#14000000</color>
     <color name="danger">#CC3B33</color>
 </resources>

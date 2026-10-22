@@ -37,21 +37,23 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="10dp"
-                    android:layout_weight="1" />
+                    android:layout_weight="1"
+                    android:popupBackground="@drawable/bg_popup" />
 
                 <Button
                     android:id="@+id/btnClose"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
                     android:layout_marginStart="4dp"
                     android:background="@drawable/bg_circle"
                     android:minWidth="0dp"
                     android:minHeight="0dp"
                     android:padding="0dp"
                     android:stateListAnimator="@null"
+                    android:contentDescription="@string/close"
                     android:text="×"
                     android:textColor="@color/text_sub"
-                    android:textSize="16sp" />
+                    android:textSize="18sp" />
             </LinearLayout>
 
             <!-- 第二行：风格 + 思考模式 -->
@@ -66,7 +68,8 @@
                     android:id="@+id/spStyle"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1" />
+                    android:layout_weight="1"
+                    android:popupBackground="@drawable/bg_popup" />
 
                 <Button
                     android:id="@+id/btnThink"
@@ -86,6 +89,19 @@
                 android:padding="10dp"
                 android:textColor="@color/text_sub"
                 android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvSrcToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:layout_marginTop="2dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:textColor="@color/primary"
+                android:text="展开原文 ▾"
+                android:textSize="11sp"
+                android:visibility="gone" />
 
             <View
                 android:layout_width="match_parent"

@@ -6,32 +6,77 @@ import android.os.Looper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
-import java.net.URL;
 import java.net.UnknownHostException;
+import java.net.UnknownServiceException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.net.ssl.SSLException;
 
 /**
  * 翻译请求：支持 OpenAI 兼容 / Anthropic / Gemini 三种协议。
- * 只用 JDK 自带的 HttpURLConnection；流式走 SSE（服务端事件流）逐块解析。
+ * 只用 JDK 自带的 HttpURLConnection；流式走 SSE（{@link SseParser}）逐块解析。
  *
  * 思考模式：按引擎的 think 字段给请求加上对应的参数
  * （OpenAI 兼容：thinking / enable_thinking；Anthropic：thinking；Gemini：thinkingConfig），
- * 如果服务商不认识这些参数（HTTP 400 参数类错误），会自动去掉参数重试一次。
+ * 如果服务商不认识这些参数（HTTP 400/422 参数类错误），会自动去掉参数重试一次。
+ *
+ * 线程与取消：请求都跑在固定大小的线程池里，并返回一个 {@link Cancel} 句柄。
+ * 调用方换引擎、换风格或关掉卡片时 cancel()，连接会被立刻断开、回调也不再送达——
+ * 否则旧请求会继续跑完，等于白付一次钱。
  */
 public class TranslateClient {
+
+    /** 连接超时基准（秒）；读取超时另按流式/非流式放大。 */
+    public static final int TIMEOUT_SEC = 30;
+
+    /** 同时最多几个请求（多引擎对比会同时开好几个）。 */
+    private static final int POOL_SIZE = 8;
+
+    private static final ExecutorService POOL = Executors.newFixedThreadPool(POOL_SIZE);
+
+    /** 一次请求的取消句柄。 */
+    public static final class Cancel {
+        private volatile boolean cancelled;
+        private volatile HttpURLConnection conn;
+
+        public void cancel() {
+            cancelled = true;
+            HttpURLConnection c = conn;
+            conn = null;
+            if (c != null) {
+                try {
+                    c.disconnect();
+                } catch (Throwable ignore) {
+                }
+            }
+        }
+
+        public boolean isCancelled() {
+            return cancelled;
+        }
+
+        void attach(HttpURLConnection c) {
+            conn = c;
+            if (cancelled) {
+                try {
+                    c.disconnect();
+                } catch (Throwable ignore) {
+                }
+            }
+        }
+
+        void detach(HttpURLConnection c) {
+            if (conn == c) conn = null;
+        }
+    }
 
     public interface Callback {
         void onDone(String text, String error);
@@ -46,14 +91,19 @@ public class TranslateClient {
         void onDone(String fullText, String error);
     }
 
+    public interface ModelsCallback {
+        void onDone(List<String> models, String error);
+    }
+
     private interface StreamSink {
         void onDelta(String d);
 
         void onReasoning(String d);
     }
 
-    private interface SseHandler {
-        void onEvent(String event, String data);
+    /** 一次请求体的构造（思考参数由重试逻辑决定）。 */
+    private interface BodyBuilder {
+        JSONObject build(int think) throws Exception;
     }
 
     /** SSE 里服务端明确报错时抛出，好把消息带给用户。 */
@@ -63,35 +113,25 @@ public class TranslateClient {
         }
     }
 
-    /** HTTP 非 2xx：带状态码和原始响应体（用于判断是不是“参数不认识”）。 */
-    static final class HttpError extends Exception {
-        final int code;
-        final String raw;
-
-        HttpError(int code, String raw) {
-            super("HTTP " + code + " " + errorMessage(raw));
-            this.code = code;
-            this.raw = raw == null ? "" : raw;
-        }
-    }
-
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     // ==================== 对外入口 ====================
 
-    /** 非流式翻译（一次性返回整段）。 */
-    public static void translateAsync(final Engine engine, final String prompt, final String text,
-                                      final int timeoutSec, final Callback cb) {
-        new Thread(new Runnable() {
+    /** 非流式翻译（一次性返回整段）。返回的句柄可用来取消。 */
+    public static Cancel translateAsync(final Engine engine, final String prompt, final String text,
+                                        final int timeoutSec, final Callback cb) {
+        final Cancel cancel = new Cancel();
+        POOL.execute(new Runnable() {
             @Override
             public void run() {
                 String out = null;
                 String err = null;
                 try {
-                    out = translate(engine, prompt, text, timeoutSec);
+                    out = translate(engine, prompt, text, timeoutSec, cancel);
                 } catch (Throwable t) {
                     err = friendly(t);
                 }
+                if (cancel.isCancelled()) return;
                 if (err == null && (out == null || out.length() == 0)) err = "引擎返回了空结果";
                 final String fOut = out == null ? "" : out;
                 final String fErr = err;
@@ -102,20 +142,22 @@ public class TranslateClient {
                     }
                 });
             }
-        }, "lighttrans-net").start();
+        });
+        return cancel;
     }
 
     /** 流式翻译（打字机效果）。引擎/中间层不支持 SSE 时自动回退成一次性请求。 */
-    public static void translateStreamAsync(final Engine engine, final String prompt, final String text,
-                                            final int timeoutSec, final StreamCallback cb) {
-        new Thread(new Runnable() {
+    public static Cancel translateStreamAsync(final Engine engine, final String prompt, final String text,
+                                              final int timeoutSec, final StreamCallback cb) {
+        final Cancel cancel = new Cancel();
+        POOL.execute(new Runnable() {
             @Override
             public void run() {
                 final StringBuilder full = new StringBuilder();
                 final boolean[] gotAny = new boolean[1];
                 String err = null;
                 try {
-                    streamRun(engine, prompt, text, timeoutSec, new StreamSink() {
+                    streamRun(engine, prompt, text, timeoutSec, cancel, new StreamSink() {
                         @Override
                         public void onDelta(String d) {
                             gotAny[0] = true;
@@ -133,10 +175,12 @@ public class TranslateClient {
                 } catch (Throwable t) {
                     err = friendly(t);
                 }
+                if (cancel.isCancelled()) return;
                 if (err != null && !gotAny[0]) {
                     // 流式不可用（老服务/代理不支持 SSE，或握手就失败）：回退成一次性请求
                     try {
-                        String out = translate(engine, prompt, text, timeoutSec);
+                        String out = translate(engine, prompt, text, timeoutSec, cancel);
+                        if (cancel.isCancelled()) return;
                         if (out != null && out.length() > 0) {
                             final String ff = out;
                             MAIN.post(new Runnable() {
@@ -152,6 +196,7 @@ public class TranslateClient {
                         err = friendly(t2);
                     }
                 }
+                if (cancel.isCancelled()) return;
                 final String fOut = full.toString();
                 final String fErr = err;
                 MAIN.post(new Runnable() {
@@ -161,7 +206,8 @@ public class TranslateClient {
                     }
                 });
             }
-        }, "lighttrans-stream").start();
+        });
+        return cancel;
     }
 
     private static void postDelta(final StreamCallback cb, final String d, final boolean reasoning) {
@@ -232,29 +278,35 @@ public class TranslateClient {
         return useThink(e) ? e.think : Engine.THINK_AUTO;
     }
 
-    // ==================== 非流式 ====================
-
-    public static String translate(Engine e, String prompt, String text, int timeoutSec) throws Exception {
-        if (e.type == Engine.TYPE_ANTHROPIC) return anthropic(e, prompt, text, timeoutSec);
-        if (e.type == Engine.TYPE_GEMINI) return gemini(e, prompt, text, timeoutSec);
-        return openai(e, prompt, text, timeoutSec);
+    /** 这次失败值不值得“去掉思考参数再试一次”。 */
+    private static boolean canRetryThink(Engine e, boolean anthropicStyle) {
+        if (!e.thinkParamOk) return false;
+        if (e.think == Engine.THINK_AUTO) return false;          // 根本没发参数，不是它的问题
+        return !anthropicStyle || e.think == Engine.THINK_ON;    // Anthropic 只在“开启”时才发 thinking
     }
 
-    private static String openai(Engine e, String prompt, String text, int timeoutSec) throws Exception {
+    // ==================== 非流式 ====================
+
+    public static String translate(Engine e, String prompt, String text, int timeoutSec, Cancel cancel) throws Exception {
+        if (e.type == Engine.TYPE_ANTHROPIC) return anthropic(e, prompt, text, timeoutSec, cancel);
+        if (e.type == Engine.TYPE_GEMINI) return gemini(e, prompt, text, timeoutSec, cancel);
+        return openai(e, prompt, text, timeoutSec, cancel);
+    }
+
+    private static String openai(final Engine e, final String prompt, final String text,
+                                 int timeoutSec, Cancel cancel) throws Exception {
         Map<String, String> h = new HashMap<String, String>();
         if (e.key.length() > 0) h.put("Authorization", "Bearer " + e.key);
 
-        JSONObject resp;
-        try {
-            resp = postJson(chatUrl(e), openaiBody(e, prompt, text, false, bodyThink(e)), h, timeoutSec);
-        } catch (HttpError he) {
-            if (!useThink(e) || !isParamError(he.code, he.raw)) throw he;
-            e.thinkParamOk = false;
-            resp = postJson(chatUrl(e), openaiBody(e, prompt, text, false, Engine.THINK_AUTO), h, timeoutSec);
-        }
+        JSONObject resp = postJsonWithRetry(e, chatUrl(e), h, timeoutSec, cancel, false, new BodyBuilder() {
+            @Override
+            public JSONObject build(int think) throws Exception {
+                return openaiBody(e, prompt, text, false, think);
+            }
+        });
         JSONArray choices = resp.optJSONArray("choices");
         if (choices == null || choices.length() == 0) {
-            throw new Exception("响应里没有 choices： " + clip(resp.toString(), 200));
+            throw new Exception("响应里没有 choices： " + HttpTransport.clip(resp.toString(), 200));
         }
         JSONObject c0 = choices.optJSONObject(0);
         JSONObject msg = c0 == null ? null : c0.optJSONObject("message");
@@ -313,19 +365,18 @@ public class TranslateClient {
         return "";
     }
 
-    private static String anthropic(Engine e, String prompt, String text, int timeoutSec) throws Exception {
+    private static String anthropic(final Engine e, final String prompt, final String text,
+                                    int timeoutSec, Cancel cancel) throws Exception {
         Map<String, String> h = new HashMap<String, String>();
         h.put("x-api-key", e.key);
         h.put("anthropic-version", "2023-06-01");
 
-        JSONObject resp;
-        try {
-            resp = postJson(chatUrl(e), anthropicBody(e, prompt, text, false, bodyThink(e)), h, timeoutSec);
-        } catch (HttpError he) {
-            if (e.think != Engine.THINK_ON || !e.thinkParamOk || !isParamError(he.code, he.raw)) throw he;
-            e.thinkParamOk = false;
-            resp = postJson(chatUrl(e), anthropicBody(e, prompt, text, false, Engine.THINK_AUTO), h, timeoutSec);
-        }
+        JSONObject resp = postJsonWithRetry(e, chatUrl(e), h, timeoutSec, cancel, true, new BodyBuilder() {
+            @Override
+            public JSONObject build(int think) throws Exception {
+                return anthropicBody(e, prompt, text, false, think);
+            }
+        });
         JSONArray content = resp.optJSONArray("content");
         StringBuilder sb = new StringBuilder();
         if (content != null) {
@@ -361,15 +412,14 @@ public class TranslateClient {
         return body;
     }
 
-    private static String gemini(Engine e, String prompt, String text, int timeoutSec) throws Exception {
-        JSONObject resp;
-        try {
-            resp = postJson(geminiUrl(e, false), geminiBody(e, prompt, text, bodyThink(e)), null, timeoutSec);
-        } catch (HttpError he) {
-            if (!useThink(e) || !isParamError(he.code, he.raw)) throw he;
-            e.thinkParamOk = false;
-            resp = postJson(geminiUrl(e, false), geminiBody(e, prompt, text, Engine.THINK_AUTO), null, timeoutSec);
-        }
+    private static String gemini(final Engine e, final String prompt, final String text,
+                                 int timeoutSec, Cancel cancel) throws Exception {
+        JSONObject resp = postJsonWithRetry(e, geminiUrl(e, false), null, timeoutSec, cancel, false, new BodyBuilder() {
+            @Override
+            public JSONObject build(int think) throws Exception {
+                return geminiBody(e, prompt, text, think);
+            }
+        });
         return clean(geminiText(resp));
     }
 
@@ -413,7 +463,7 @@ public class TranslateClient {
     private static String geminiText(JSONObject resp) throws Exception {
         JSONArray cands = resp.optJSONArray("candidates");
         if (cands == null || cands.length() == 0) {
-            throw new Exception("响应里没有 candidates： " + clip(resp.toString(), 200));
+            throw new Exception("响应里没有 candidates： " + HttpTransport.clip(resp.toString(), 200));
         }
         JSONObject c0 = cands.optJSONObject(0);
         StringBuilder sb = new StringBuilder();
@@ -436,33 +486,33 @@ public class TranslateClient {
 
     // ==================== 流式（SSE） ====================
 
-    private static void streamRun(Engine e, String prompt, String text, int timeoutSec, StreamSink sink) throws Exception {
+    private static void streamRun(Engine e, String prompt, String text, int timeoutSec, Cancel cancel,
+                                  StreamSink sink) throws Exception {
         if (e.type == Engine.TYPE_ANTHROPIC) {
-            anthropicStream(e, prompt, text, timeoutSec, sink);
+            anthropicStream(e, prompt, text, timeoutSec, cancel, sink);
             return;
         }
         if (e.type == Engine.TYPE_GEMINI) {
-            geminiStream(e, prompt, text, timeoutSec, sink);
+            geminiStream(e, prompt, text, timeoutSec, cancel, sink);
             return;
         }
-        openaiStream(e, prompt, text, timeoutSec, sink);
+        openaiStream(e, prompt, text, timeoutSec, cancel, sink);
     }
 
-    private static void openaiStream(Engine e, String prompt, String text, int timeoutSec, final StreamSink sink) throws Exception {
-        String url = chatUrl(e);
+    private static void openaiStream(final Engine e, final String prompt, final String text,
+                                     int timeoutSec, final Cancel cancel, final StreamSink sink) throws Exception {
         Map<String, String> h = new HashMap<String, String>();
         if (e.key.length() > 0) h.put("Authorization", "Bearer " + e.key);
 
-        HttpURLConnection conn;
+        final HttpURLConnection conn = openStreamWithRetry(e, chatUrl(e), h, timeoutSec, cancel, false,
+                new BodyBuilder() {
+                    @Override
+                    public JSONObject build(int think) throws Exception {
+                        return openaiBody(e, prompt, text, true, think);
+                    }
+                });
         try {
-            conn = openPost(url, openaiBody(e, prompt, text, true, bodyThink(e)), h, timeoutSec, true);
-        } catch (HttpError he) {
-            if (!useThink(e) || !isParamError(he.code, he.raw)) throw he;
-            e.thinkParamOk = false;
-            conn = openPost(url, openaiBody(e, prompt, text, true, Engine.THINK_AUTO), h, timeoutSec, true);
-        }
-        try {
-            readSse(conn.getInputStream(), new SseHandler() {
+            SseParser.parse(conn.getInputStream(), new SseParser.Handler() {
                 @Override
                 public void onEvent(String event, String data) {
                     String d = data.trim();
@@ -494,25 +544,25 @@ public class TranslateClient {
             throw new Exception(se.getMessage());
         } finally {
             conn.disconnect();
+            cancel.detach(conn);
         }
     }
 
-    private static void anthropicStream(Engine e, String prompt, String text, int timeoutSec, final StreamSink sink) throws Exception {
-        String url = chatUrl(e);
+    private static void anthropicStream(final Engine e, final String prompt, final String text,
+                                        int timeoutSec, final Cancel cancel, final StreamSink sink) throws Exception {
         Map<String, String> h = new HashMap<String, String>();
         h.put("x-api-key", e.key);
         h.put("anthropic-version", "2023-06-01");
 
-        HttpURLConnection conn;
+        final HttpURLConnection conn = openStreamWithRetry(e, chatUrl(e), h, timeoutSec, cancel, true,
+                new BodyBuilder() {
+                    @Override
+                    public JSONObject build(int think) throws Exception {
+                        return anthropicBody(e, prompt, text, true, think);
+                    }
+                });
         try {
-            conn = openPost(url, anthropicBody(e, prompt, text, true, bodyThink(e)), h, timeoutSec, true);
-        } catch (HttpError he) {
-            if (e.think != Engine.THINK_ON || !e.thinkParamOk || !isParamError(he.code, he.raw)) throw he;
-            e.thinkParamOk = false;
-            conn = openPost(url, anthropicBody(e, prompt, text, true, Engine.THINK_AUTO), h, timeoutSec, true);
-        }
-        try {
-            readSse(conn.getInputStream(), new SseHandler() {
+            SseParser.parse(conn.getInputStream(), new SseParser.Handler() {
                 @Override
                 public void onEvent(String event, String data) {
                     String d = data.trim();
@@ -541,21 +591,22 @@ public class TranslateClient {
             throw new Exception(se.getMessage());
         } finally {
             conn.disconnect();
+            cancel.detach(conn);
         }
     }
 
-    private static void geminiStream(Engine e, String prompt, String text, int timeoutSec, final StreamSink sink) throws Exception {
-        String url = geminiUrl(e, true);
-        HttpURLConnection conn;
+    private static void geminiStream(final Engine e, final String prompt, final String text,
+                                     int timeoutSec, final Cancel cancel, final StreamSink sink) throws Exception {
+        final String url = geminiUrl(e, true);
+        final HttpURLConnection conn = openStreamWithRetry(e, url, null, timeoutSec, cancel, false,
+                new BodyBuilder() {
+                    @Override
+                    public JSONObject build(int think) throws Exception {
+                        return geminiBody(e, prompt, text, think);
+                    }
+                });
         try {
-            conn = openPost(url, geminiBody(e, prompt, text, bodyThink(e)), null, timeoutSec, true);
-        } catch (HttpError he) {
-            if (!useThink(e) || !isParamError(he.code, he.raw)) throw he;
-            e.thinkParamOk = false;
-            conn = openPost(url, geminiBody(e, prompt, text, Engine.THINK_AUTO), null, timeoutSec, true);
-        }
-        try {
-            readSse(conn.getInputStream(), new SseHandler() {
+            SseParser.parse(conn.getInputStream(), new SseParser.Handler() {
                 @Override
                 public void onEvent(String event, String data) {
                     String d = data.trim();
@@ -588,57 +639,25 @@ public class TranslateClient {
             throw new Exception(se.getMessage());
         } finally {
             conn.disconnect();
+            cancel.detach(conn);
         }
-    }
-
-    /** 极简 SSE 解析：事件由空行分隔，data 可多行；注释行(:)忽略。 */
-    private static void readSse(InputStream in, SseHandler handler) throws Exception {
-        if (in == null) throw new Exception("连接失败：没有响应内容");
-        BufferedReader r = new BufferedReader(new InputStreamReader(in, "UTF-8"));
-        StringBuilder data = new StringBuilder();
-        String event = "";
-        String line;
-        while ((line = r.readLine()) != null) {
-            if (line.length() == 0) {
-                if (data.length() > 0) {
-                    handler.onEvent(event, data.toString());
-                    data.setLength(0);
-                    event = "";
-                }
-                continue;
-            }
-            if (line.startsWith(":")) continue;
-            if (line.startsWith("event:")) {
-                event = line.substring(6).trim();
-                continue;
-            }
-            if (line.startsWith("data:")) {
-                String v = line.substring(5);
-                if (v.startsWith(" ")) v = v.substring(1);
-                if (data.length() > 0) data.append('\n');
-                data.append(v);
-            }
-        }
-        if (data.length() > 0) handler.onEvent(event, data.toString());
     }
 
     // ==================== 拉取模型列表 ====================
 
-    public interface ModelsCallback {
-        void onDone(List<String> models, String error);
-    }
-
-    public static void listModelsAsync(final Engine e, final int timeoutSec, final ModelsCallback cb) {
-        new Thread(new Runnable() {
+    public static Cancel listModelsAsync(final Engine e, final int timeoutSec, final ModelsCallback cb) {
+        final Cancel cancel = new Cancel();
+        POOL.execute(new Runnable() {
             @Override
             public void run() {
                 List<String> out = null;
                 String err = null;
                 try {
-                    out = listModels(e, timeoutSec);
+                    out = listModels(e, timeoutSec, cancel);
                 } catch (Throwable t) {
                     err = friendly(t);
                 }
+                if (cancel.isCancelled()) return;
                 if (err == null && (out == null || out.isEmpty())) err = "这个引擎没有返回任何模型";
                 final List<String> fOut = out;
                 final String fErr = err;
@@ -649,11 +668,12 @@ public class TranslateClient {
                     }
                 });
             }
-        }, "lighttrans-models").start();
+        });
+        return cancel;
     }
 
     /** 拉取模型列表：OpenAI 兼容 / Anthropic 用 /models，Gemini 用 /v1beta/models?key= */
-    public static List<String> listModels(Engine e, int timeoutSec) throws Exception {
+    public static List<String> listModels(Engine e, int timeoutSec, Cancel cancel) throws Exception {
         String url = modelsUrl(e);
         Map<String, String> h = new HashMap<String, String>();
         if (e.type == Engine.TYPE_ANTHROPIC) {
@@ -665,7 +685,7 @@ public class TranslateClient {
             h.put("Authorization", "Bearer " + e.key);
         }
 
-        JSONObject resp = getJson(url, h, timeoutSec);
+        JSONObject resp = HttpTransport.getJson(url, h, timeoutSec, cancel);
         List<String> list = new ArrayList<String>();
         if (e.type == Engine.TYPE_GEMINI) {
             JSONArray arr = resp.optJSONArray("models");
@@ -693,83 +713,40 @@ public class TranslateClient {
         return list;
     }
 
-    // ==================== HTTP 基础 ====================
+    // ==================== 思考参数重试 ====================
 
-    private static HttpURLConnection openPost(String url, JSONObject body, Map<String, String> headers,
-                                              int timeoutSec, boolean stream) throws Exception {
-        if (url == null || url.length() == 0) throw new Exception("没有配置接口地址");
-        int t = timeoutSec <= 0 ? 30 : timeoutSec;
-        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-        boolean ok = false;
+    /**
+     * 非流式请求：先按引擎的思考设置发一次，服务商不认参数时去掉参数重发一次。
+     * （三种协议共用这一份重试逻辑，别再各写一遍。）
+     */
+    private static JSONObject postJsonWithRetry(final Engine e, final String url, final Map<String, String> h,
+                                                final int timeoutSec, final Cancel cancel,
+                                                final boolean anthropicStyle, final BodyBuilder body) throws Exception {
         try {
-            conn.setRequestMethod("POST");
-            conn.setConnectTimeout(t * 1000);
-            conn.setReadTimeout(Math.max(t, stream ? 120 : 60) * 1000);
-            conn.setDoOutput(true);
-            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            conn.setRequestProperty("Accept", stream ? "text/event-stream" : "application/json");
-            if (headers != null) {
-                for (Map.Entry<String, String> en : headers.entrySet()) {
-                    conn.setRequestProperty(en.getKey(), en.getValue());
-                }
-            }
-            byte[] data = body.toString().getBytes("UTF-8");
-            conn.setFixedLengthStreamingMode(data.length);
-            OutputStream os = conn.getOutputStream();
-            os.write(data);
-            os.flush();
-            os.close();
-
-            int code = conn.getResponseCode();
-            if (code < 200 || code >= 300) {
-                String raw = readAll(conn.getErrorStream());
-                throw new HttpError(code, raw);
-            }
-            ok = true;
-            return conn;
-        } finally {
-            if (!ok) conn.disconnect();
+            return HttpTransport.postJson(url, body.build(bodyThink(e)), h, timeoutSec, cancel);
+        } catch (HttpTransport.HttpError he) {
+            if (!canRetryThink(e, anthropicStyle) || !isParamError(he.code, he.raw)) throw he;
+            e.thinkParamOk = false;
+            return HttpTransport.postJson(url, body.build(Engine.THINK_AUTO), h, timeoutSec, cancel);
         }
     }
 
-    private static JSONObject postJson(String url, JSONObject body, Map<String, String> headers,
-                                       int timeoutSec) throws Exception {
-        HttpURLConnection conn = openPost(url, body, headers, timeoutSec, false);
+    /** 流式请求（同上），返回的是已经拿到 2xx 的连接。 */
+    private static HttpURLConnection openStreamWithRetry(final Engine e, final String url, final Map<String, String> h,
+                                                        final int timeoutSec, final Cancel cancel,
+                                                        final boolean anthropicStyle, final BodyBuilder body) throws Exception {
         try {
-            String raw = readAll(conn.getInputStream());
-            return new JSONObject(raw);
-        } finally {
-            conn.disconnect();
+            return HttpTransport.openPost(url, body.build(bodyThink(e)), h, timeoutSec, true, cancel);
+        } catch (HttpTransport.HttpError he) {
+            if (!canRetryThink(e, anthropicStyle) || !isParamError(he.code, he.raw)) throw he;
+            e.thinkParamOk = false;
+            return HttpTransport.openPost(url, body.build(Engine.THINK_AUTO), h, timeoutSec, true, cancel);
         }
     }
 
-    private static JSONObject getJson(String url, Map<String, String> headers, int timeoutSec) throws Exception {
-        if (url == null || url.length() == 0) throw new Exception("没有配置接口地址");
-        int t = timeoutSec <= 0 ? 30 : timeoutSec;
-        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-        try {
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(t * 1000);
-            conn.setReadTimeout(Math.max(t, 60) * 1000);
-            conn.setRequestProperty("Accept", "application/json");
-            if (headers != null) {
-                for (Map.Entry<String, String> en : headers.entrySet()) {
-                    conn.setRequestProperty(en.getKey(), en.getValue());
-                }
-            }
-            int code = conn.getResponseCode();
-            InputStream in = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
-            String raw = readAll(in);
-            if (code < 200 || code >= 300) throw new Exception("HTTP " + code + " " + errorMessage(raw));
-            return new JSONObject(raw);
-        } finally {
-            conn.disconnect();
-        }
-    }
-
-    /** 400 且报错信息看着像“不认识这个参数”时返回 true（用于去掉思考参数重试）。 */
+    /** 400/422 且报错信息看着像“不认识这个参数”时返回 true（用于去掉思考参数重试）。 */
     private static boolean isParamError(int code, String raw) {
-        if (code != 400 || raw == null) return false;
+        if ((code != 400 && code != 422) || raw == null) return false;
         String s = raw.toLowerCase();
         String[] keys = {
                 "unrecognized", "unknown parameter", "unknown argument", "unknown field",
@@ -783,42 +760,11 @@ public class TranslateClient {
         return false;
     }
 
-    private static String readAll(InputStream in) throws Exception {
-        if (in == null) return "";
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        byte[] buf = new byte[4096];
-        int n;
-        while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
-        in.close();
-        return new String(bos.toByteArray(), "UTF-8");
-    }
-
-    private static String errorMessage(String raw) {
-        if (raw == null || raw.length() == 0) return "";
-        try {
-            JSONObject o = new JSONObject(raw);
-            JSONObject err = o.optJSONObject("error");
-            if (err != null) {
-                String m = err.optString("message", "");
-                if (m.length() > 0) return "- " + m;
-            }
-            String m2 = o.optString("message", "");
-            if (m2.length() > 0) return "- " + m2;
-            String m3 = o.optString("error_description", "");
-            if (m3.length() > 0) return "- " + m3;
-        } catch (Throwable ignore) {
-        }
-        return "- " + clip(raw, 200);
-    }
-
-    private static String clip(String s, int max) {
-        if (s == null) return "";
-        s = s.replace('\n', ' ').trim();
-        return s.length() <= max ? s : s.substring(0, max) + "…";
-    }
-
-    /** 去掉思考型模型输出的思维链，只留下译文。 */
-    private static String clean(String s) {
+    /**
+     * 去掉思考型模型输出的思维链，只留下译文。
+     * 非流式直接在这里剥；流式由 UI 在收尾时对整段调用一次（见 BaseSink.onDone）。
+     */
+    static String clean(String s) {
         if (s == null) return "";
         s = s.replaceAll("(?s)<(think|thinking|reasoning)>.*?</\\1>", "");
         return s.trim();
@@ -827,8 +773,11 @@ public class TranslateClient {
     public static String friendly(Throwable t) {
         if (t instanceof UnknownHostException) return "连不上网络（域名解析失败）";
         if (t instanceof SocketTimeoutException) return "请求超时，换个引擎或检查网络";
-        if (t instanceof SSLException) return "HTTPS 连接失败： " + clip(t.getMessage(), 120);
+        if (t instanceof UnknownServiceException) {
+            return "该地址是 http 明文，系统禁止了明文请求：请改用 https 地址，或确认系统允许明文流量";
+        }
+        if (t instanceof SSLException) return "HTTPS 连接失败： " + HttpTransport.clip(t.getMessage(), 120);
         String m = t.getMessage();
-        return (m == null || m.length() == 0) ? t.getClass().getSimpleName() : clip(m, 200);
+        return (m == null || m.length() == 0) ? t.getClass().getSimpleName() : HttpTransport.clip(m, 200);
     }
 }

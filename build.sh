@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # 轻译 · 离线构建脚本（不需要 Gradle、不需要联网）
 # 依赖：Android SDK 的 aapt2/d8/zipalign/apksigner + JDK 的 javac/keytool
+#
+#   ./build.sh        构建 APK（版本号只从 AndroidManifest.xml 读，别在命令行再写一遍）
+#   ./build.sh test   只跑纯 JDK 单元测试（不需要 Android SDK）
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -9,6 +12,18 @@ PLATFORM="${PLATFORM:-android-36}"
 BT="$SDK/build-tools/${BUILD_TOOLS:-36.0.0}"
 JAR="$SDK/platforms/$PLATFORM/android.jar"
 OUT="build"
+
+# 单元测试：SseParser 不依赖 Android，直接 javac + java 跑
+if [ "${1:-}" = "test" ]; then
+  echo "== 单元测试（纯 JDK） =="
+  rm -rf "$OUT/test"
+  mkdir -p "$OUT/test"
+  javac -encoding UTF-8 -d "$OUT/test" \
+    app/src/com/Lighttrans/app/SseParser.java \
+    test/com/Lighttrans/app/SseParserTest.java
+  java -cp "$OUT/test" com.Lighttrans.app.SseParserTest
+  exit 0
+fi
 
 # 优先用 PATH 里的工具（沙盒里它们是 qemu 包装器），否则用 build-tools 里的
 pick() { command -v "$1" 2>/dev/null || echo "$BT/$1"; }
@@ -24,8 +39,7 @@ echo "== 2/6 aapt2 compile + link =="
 "$AAPT2" compile --dir app/res -o "$OUT/res.zip"
 "$AAPT2" link -o "$OUT/base.apk" -I "$JAR" \
   --manifest app/AndroidManifest.xml --java "$OUT/gen" \
-  --min-sdk-version 26 --target-sdk-version 36 \
-  --version-code 21 --version-name 3.4 "$OUT/res.zip"
+  --min-sdk-version 26 --target-sdk-version 36 "$OUT/res.zip"
 
 echo "== 3/6 javac =="
 find app/src "$OUT/gen" -name '*.java' > "$OUT/sources.txt"

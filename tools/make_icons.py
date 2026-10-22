@@ -27,8 +27,6 @@ def main():
         d = "app/res/mipmap-%s" % name
         os.makedirs(d, exist_ok=True)
         rounded(px).save(os.path.join(d, "ic_launcher.png"))
-    os.makedirs("app/res/drawable-xxhdpi", exist_ok=True)
-    rounded(192).save("app/res/drawable-xxhdpi/ball_icon.png")
     print("icons rebuilt from", SVG)
 
 if __name__ == "__main__":

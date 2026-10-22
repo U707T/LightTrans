@@ -5,6 +5,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
@@ -33,20 +34,27 @@ import java.util.Locale;
  */
 public class ProcessTextActivity extends Activity {
 
+    /** 超过这个字数就提示“可能超出模型上限”（只提示，不擅自截断）。 */
+    private static final int LONG_TEXT_WARN = 20000;
+
     private EngineStore store;
     private List<Engine> engines;
     private Spinner spEngine, spStyle;
-    private TextView tvSrc, tvDst, tvStatus, tvThink;
+    private TextView tvSrc, tvSrcToggle, tvDst, tvStatus, tvThink;
     private Button btnRetry, btnCopy, btnReplace, btnThink;
     private LinearLayout boxResults;
-    private List<TextView> multiOuts;
-    private List<String> multiNames;
     private String source = "";
     private String result = "";
     private boolean readOnly = false;
+    private boolean srcExpanded = false;
+    private boolean longSource = false;
     private int reqSeq = 0;
     private int lastTriggeredPos = -1;
     private int lastStylePos = -1;
+    /** 多引擎对比的结构化结果：复制/替换都从这里取，不再去反解 TextView 里的文本。 */
+    private List<Result> multiResults;
+    /** 当前正在跑的请求，换引擎/关卡片时统一取消。 */
+    private final List<TranslateClient.Cancel> running = new ArrayList<TranslateClient.Cancel>();
 
     @Override
     protected void onCreate(Bundle icicle) {
@@ -54,13 +62,13 @@ public class ProcessTextActivity extends Activity {
         store = new EngineStore(this);
 
         Window win = getWindow();
-        DisplayMetrics dm = getResources().getDisplayMetrics();
-        win.setLayout((int) (dm.widthPixels * 0.94f), ViewGroup.LayoutParams.WRAP_CONTENT);
+        applyWindowWidth(win);
         win.setBackgroundDrawable(new ColorDrawable(0x00000000));
 
         setContentView(R.layout.activity_process_text);
 
         tvSrc = (TextView) findViewById(R.id.tvSrc);
+        tvSrcToggle = (TextView) findViewById(R.id.tvSrcToggle);
         tvDst = (TextView) findViewById(R.id.tvDst);
         tvStatus = (TextView) findViewById(R.id.tvStatus);
         tvThink = (TextView) findViewById(R.id.tvThink);
@@ -81,8 +89,21 @@ public class ProcessTextActivity extends Activity {
             if (cs != null) readOnly = true;                 // 分享进来的文本没法写回原处
         }
         source = cs == null ? "" : cs.toString().trim();
+        longSource = source.length() > LONG_TEXT_WARN;
 
         tvSrc.setText(source);
+        // 原文超过 3 行时给一个展开入口：不然长文本没法核对到底把什么发出去了
+        if (source.length() > 80) {
+            tvSrcToggle.setVisibility(View.VISIBLE);
+            tvSrcToggle.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    srcExpanded = !srcExpanded;
+                    tvSrc.setMaxLines(srcExpanded ? Integer.MAX_VALUE : 3);
+                    tvSrcToggle.setText(srcExpanded ? "收起原文 ▴" : "展开原文 ▾");
+                }
+            });
+        }
         btnReplace.setVisibility(readOnly ? View.GONE : View.VISIBLE);
 
         // ---------- 引擎下拉 ----------
@@ -114,7 +135,8 @@ public class ProcessTextActivity extends Activity {
         });
 
         // ---------- 风格下拉（每个引擎各自的翻译风格） ----------
-        ArrayAdapter<String> sa = new ArrayAdapter<String>(this, R.layout.item_spinner, EngineStore.styleLabels());
+        // 多给一项「自定义」：索引 STYLES.length 是合法的，自定义风格也能如实显示。
+        ArrayAdapter<String> sa = new ArrayAdapter<String>(this, R.layout.item_spinner, Prompts.styleLabelsWithCustom());
         sa.setDropDownViewResource(R.layout.item_spinner_dropdown);
         spStyle.setAdapter(sa);
         int styleIdx = styleIndex(engines.isEmpty() ? null : engines.get(idx));
@@ -127,8 +149,8 @@ public class ProcessTextActivity extends Activity {
                 lastStylePos = pos;
                 Engine e = currentEngine();
                 if (e == null) return;
-                e.style = pos >= 0 && pos < EngineStore.STYLES.length
-                        ? EngineStore.STYLES[pos].id : EngineStore.CUSTOM_STYLE_ID;
+                e.style = pos >= 0 && pos < Prompts.STYLES.length
+                        ? Prompts.STYLES[pos].id : Prompts.CUSTOM_STYLE_ID;
                 store.setEngineStyle(e.id, e.style);
                 doTranslate();
             }
@@ -169,31 +191,38 @@ public class ProcessTextActivity extends Activity {
             @Override
             public void onClick(View v) {
                 String s;
-                if (multiOuts != null && multiNames != null && !multiOuts.isEmpty()) {
+                if (multiResults != null && !multiResults.isEmpty()) {
                     StringBuilder sb = new StringBuilder();
-                    for (int i = 0; i < multiOuts.size(); i++) {
-                        sb.append(multiNames.get(i)).append("：\n")
-                                .append(multiOuts.get(i).getText()).append("\n\n");
+                    for (int i = 0; i < multiResults.size(); i++) {
+                        Result r = multiResults.get(i);
+                        if (r.text.length() == 0) continue;
+                        sb.append(r.name).append("：\n").append(r.text).append("\n\n");
                     }
                     s = sb.toString().trim();
+                    if (s.length() == 0) s = source;
                 } else {
                     s = result.length() > 0 ? result : source;
                 }
                 ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                 if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("轻译", s));
-                toast("已复制");
+                btnCopy.setText("已复制");
+                btnCopy.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        btnCopy.setText("复制");
+                    }
+                }, 1200);
             }
         });
         btnReplace.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 String out = result;
-                if (out.length() == 0 && multiOuts != null) {
-                    for (int i = 0; i < multiOuts.size(); i++) {
-                        String t = multiOuts.get(i).getText().toString();
-                        if (t.length() > 0 && !t.equals("…") && !t.startsWith("失败")
-                                && !t.startsWith("未配置") && !t.startsWith("思考中")) {
-                            out = t;
+                if (out.length() == 0 && multiResults != null) {
+                    for (int i = 0; i < multiResults.size(); i++) {
+                        Result r = multiResults.get(i);
+                        if (r.error == null && r.text.length() > 0) {
+                            out = r.text;
                             break;
                         }
                     }
@@ -210,21 +239,39 @@ public class ProcessTextActivity extends Activity {
         });
 
         if (source.length() == 0) {
-            btnRetry.setEnabled(false);
+            setRetryEnabled(false);
             tvStatus.setText("没有收到选中文本：请先选中一段文字，再在菜单里点「AI 翻译」。");
         } else {
             doTranslate();
         }
     }
 
+    @Override
+    protected void onDestroy() {
+        cancelRunning();
+        super.onDestroy();
+    }
+
+    /** 旋转后窗口宽度要按新屏幕重算（本 Activity 声明了 configChanges，不会重建）。 */
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        applyWindowWidth(getWindow());
+    }
+
+    private void applyWindowWidth(Window win) {
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        win.setLayout((int) (dm.widthPixels * 0.94f), ViewGroup.LayoutParams.WRAP_CONTENT);
+    }
+
     // ---------- 小工具 ----------
 
     private int styleIndex(Engine e) {
         String id = (e == null || e.style == null) ? "" : e.style;
-        for (int i = 0; i < EngineStore.STYLES.length; i++) {
-            if (EngineStore.STYLES[i].id.equals(id)) return i;
+        for (int i = 0; i < Prompts.STYLES.length; i++) {
+            if (Prompts.STYLES[i].id.equals(id)) return i;
         }
-        return EngineStore.CUSTOM_STYLE_ID.equals(id) ? EngineStore.STYLES.length : 0; // 未知/空按“通用”
+        return Prompts.CUSTOM_STYLE_ID.equals(id) ? Prompts.STYLES.length : 0; // 未知/空按“通用”
     }
 
     private Engine currentEngine() {
@@ -246,39 +293,67 @@ public class ProcessTextActivity extends Activity {
         Engine e = currentEngine();
         if (e == null) {
             btnThink.setText("思考");
+            btnThink.setEnabled(false);
             return;
         }
+        btnThink.setEnabled(true);
         btnThink.setText("思考：" + e.thinkName());
     }
 
     private String langText() {
-        return EngineStore.langInstruction(store.targetLang());
+        return Prompts.langInstruction(store.targetLang());
     }
 
     private static String secs(long ms) {
         return String.format(Locale.CHINA, "%.1fs", ms / 1000.0);
     }
 
-    /** 按“流式开关”发请求；提示词按“这个引擎自己的风格”解析。 */
-    private void startTranslate(final Engine e, final TranslateClient.StreamCallback sink) {
-        final String prompt = EngineStore.promptFor(e).replace("{目标语言}",
-                EngineStore.langInstruction(store.targetLang()));
+    /** 原文过长时的提醒（只提醒，不截断——截断译文比报错更难发现）。 */
+    private String longNote() {
+        return longSource ? "（原文 " + source.length() + " 字，可能超出模型上限，建议分段翻译）" : "";
+    }
+
+    /** 禁用时同时压暗：否则「翻译中」的按钮看起来和可点的一模一样。 */
+    private void setRetryEnabled(boolean on) {
+        btnRetry.setEnabled(on);
+        btnRetry.setAlpha(on ? 1f : 0.45f);
+    }
+
+    private void cancelRunning() {
+        for (int i = 0; i < running.size(); i++) running.get(i).cancel();
+        running.clear();
+    }
+
+    /** 按“流式开关”发请求；提示词按“这个引擎自己的风格”解析。返回的句柄用于取消。 */
+    private TranslateClient.Cancel startTranslate(final Engine e, final TranslateClient.StreamCallback sink) {
+        String prompt = Prompts.promptFor(e).replace("{目标语言}", Prompts.langInstruction(store.targetLang()));
+        TranslateClient.Cancel c;
         if (store.streamOn()) {
-            TranslateClient.translateStreamAsync(e, prompt, source, store.timeoutSec(), sink);
+            c = TranslateClient.translateStreamAsync(e, prompt, source, TranslateClient.TIMEOUT_SEC, sink);
         } else {
-            TranslateClient.translateAsync(e, prompt, source, store.timeoutSec(), new TranslateClient.Callback() {
-                @Override
-                public void onDone(String text, String error) {
-                    sink.onDone(text, error);
-                }
-            });
+            c = TranslateClient.translateAsync(e, prompt, source, TranslateClient.TIMEOUT_SEC,
+                    new TranslateClient.Callback() {
+                        @Override
+                        public void onDone(String text, String error) {
+                            sink.onDone(text, error);
+                        }
+                    });
         }
+        running.add(c);
+        return c;
     }
 
     // ---------- 翻译 ----------
 
     private void doTranslate() {
         if (source.length() == 0) return;
+        if (engines.isEmpty()) {
+            tvDst.setText("");
+            tvStatus.setTextColor(getColor(R.color.text_hint));
+            tvStatus.setText("还没有引擎：先打开「轻译」点「添加引擎」配置一个。");
+            setRetryEnabled(false);
+            return;
+        }
         int pos = spEngine.getSelectedItemPosition();
         if (pos < 0 || pos >= engines.size()) pos = 0;
         lastTriggeredPos = pos;
@@ -287,10 +362,11 @@ public class ProcessTextActivity extends Activity {
 
         final List<Engine> targets = store.multiMode() ? store.compareEngines() : null;
 
-        btnRetry.setEnabled(false);
+        cancelRunning(); // 旧请求直接断开，别让它继续烧 token
+
+        setRetryEnabled(false);
         result = "";
-        multiOuts = null;
-        multiNames = null;
+        multiResults = null;
 
         if (targets == null || targets.size() <= 1) {
             // ---------------- 单引擎（流式打字机） ----------------
@@ -302,13 +378,14 @@ public class ProcessTextActivity extends Activity {
             tvThink.setText("");
             if (!e.isConfigured()) {
                 tvDst.setText("");
+                tvStatus.setTextColor(getColor(R.color.text_hint));
                 tvStatus.setText("「" + e.name + "」还没填接口地址或模型：请打开「轻译」应用配置一下。");
-                btnRetry.setEnabled(true);
+                setRetryEnabled(true);
                 return;
             }
             final int seq = ++reqSeq;
             tvDst.setText("…");
-            tvStatus.setTextColor(0xFF9AA1AE);
+            tvStatus.setTextColor(getColor(R.color.text_hint));
             tvStatus.setText("正在用 " + e.name + " 翻译…");
             startTranslate(e, new SingleSink(seq, e));
             return;
@@ -322,8 +399,7 @@ public class ProcessTextActivity extends Activity {
         final int batchSeq = ++reqSeq;
         final Batch batch = new Batch();
         batch.total = targets.size();
-        final List<TextView> outs = new ArrayList<TextView>();
-        final List<String> names = new ArrayList<String>();
+        final List<Result> results = new ArrayList<Result>();
         for (int i = 0; i < targets.size(); i++) {
             final Engine e = targets.get(i);
             LinearLayout col = new LinearLayout(this);
@@ -332,33 +408,34 @@ public class ProcessTextActivity extends Activity {
             TextView head = new TextView(this);
             head.setText(e.name + (e.model.length() > 0 ? "  ·  " + e.model : "") + "  ·  " + e.typeName()
                     + (e.style == null || e.style.length() == 0 || "general".equals(e.style)
-                       ? "" : "  ·  " + EngineStore.styleName(e.style))
+                       ? "" : "  ·  " + Prompts.styleName(e.style))
                     + (e.think == Engine.THINK_ON ? "  ·  思考开启" : ""));
             head.setTextSize(11);
-            head.setTextColor(0xFF9AA1AE);
+            head.setTextColor(getColor(R.color.text_hint));
             final TextView body = new TextView(this);
             body.setTextSize(16);
             body.setLineSpacing(dp(4), 1f);
             body.setTextIsSelectable(true);
-            body.setTextColor(0xFF111111);
+            body.setTextColor(getColor(R.color.text_main));
             body.setText(e.isConfigured() ? "…" : "未配置接口地址或模型");
             col.addView(head);
             col.addView(body);
             boxResults.addView(col);
-            outs.add(body);
-            names.add(e.name);
+
+            final Result r = new Result(e.name);
+            results.add(r);
             if (!e.isConfigured()) {
+                r.error = "未配置接口地址或模型";
                 batch.done++;
                 continue;
             }
-            startTranslate(e, new MultiSink(batchSeq, e, body, batch));
+            startTranslate(e, new MultiSink(batchSeq, e, body, r, batch));
         }
-        tvStatus.setTextColor(0xFF9AA1AE);
+        multiResults = results;
+        tvStatus.setTextColor(getColor(R.color.text_hint));
         tvStatus.setText(targets.size() + " 个引擎 · 已完成 " + batch.done + "/" + batch.total
-                + " · " + langText());
-        multiOuts = outs;
-        multiNames = names;
-        btnRetry.setEnabled(true);
+                + " · " + langText() + longNote());
+        setRetryEnabled(true);
     }
 
     // ---------- 流式接收 ----------
@@ -366,6 +443,17 @@ public class ProcessTextActivity extends Activity {
     private static final class Batch {
         int total;
         int done;
+    }
+
+    /** 多引擎对比里单个引擎的结果。 */
+    private static final class Result {
+        final String name;
+        String text = "";
+        String error = null;
+
+        Result(String name) {
+            this.name = name;
+        }
     }
 
     private abstract class BaseSink implements TranslateClient.StreamCallback {
@@ -398,6 +486,12 @@ public class ProcessTextActivity extends Activity {
             if (reqSeq != seq) return;
             store.flushEngineFlags(eng);
             if (error == null && ans.length() == 0 && full != null && full.length() > 0) ans.append(full);
+            // 有些代理会把  thinking 直接塞进正文：收尾时统一剥一次，别把裸标签留在界面上
+            if (ans.indexOf("<think") >= 0 || ans.indexOf("<reasoning>") >= 0) {
+                String cleaned = TranslateClient.clean(ans.toString());
+                ans.setLength(0);
+                ans.append(cleaned);
+            }
             render(true);
             onFinish(error);
         }
@@ -438,19 +532,19 @@ public class ProcessTextActivity extends Activity {
         @Override
         void onFinish(String error) {
             if (reqSeq != seq) return;
-            btnRetry.setEnabled(true);
+            setRetryEnabled(true);
             if (error != null) {
-                tvStatus.setTextColor(0xFFCC3B33);
+                tvStatus.setTextColor(getColor(R.color.danger));
                 tvStatus.setText("翻译失败： " + error
-                        + (ans.length() > 0 ? "（以上为已收到的部分译文）" : ""));
+                        + (ans.length() > 0 ? "（以上为已收到的部分译文）" : "") + longNote());
                 if (ans.length() == 0) {
                     tvDst.setText("");
                     result = "";
                 }
             } else {
-                tvStatus.setTextColor(0xFF9AA1AE);
+                tvStatus.setTextColor(getColor(R.color.text_hint));
                 tvStatus.setText(eng.name + " · " + secs(System.currentTimeMillis() - start)
-                        + " · " + langText());
+                        + " · " + langText() + longNote());
             }
         }
     }
@@ -458,11 +552,13 @@ public class ProcessTextActivity extends Activity {
     /** 多引擎：每个引擎一块，各自流式刷新。 */
     private final class MultiSink extends BaseSink {
         private final TextView body;
+        private final Result res;
         private final Batch batch;
 
-        MultiSink(int seq, Engine e, TextView body, Batch batch) {
+        MultiSink(int seq, Engine e, TextView body, Result res, Batch batch) {
             super(seq, e);
             this.body = body;
+            this.res = res;
             this.batch = batch;
         }
 
@@ -470,11 +566,12 @@ public class ProcessTextActivity extends Activity {
         void render(boolean finished) {
             if (reqSeq != seq) return;
             String t = ans.toString();
+            res.text = t;
             if (t.length() > 0) {
-                body.setTextColor(0xFF111111);
+                body.setTextColor(getColor(R.color.text_main));
                 body.setText(finished ? t : t + "▍");
             } else if (!finished) {
-                body.setTextColor(0xFF9AA1AE);
+                body.setTextColor(getColor(R.color.text_hint));
                 body.setText(rea.length() > 0 ? "思考中…" : "…");
             }
         }
@@ -482,14 +579,16 @@ public class ProcessTextActivity extends Activity {
         @Override
         void onFinish(String error) {
             if (reqSeq != seq) return;
+            res.text = ans.toString();
+            res.error = error;
             batch.done++;
             if (error != null) {
-                body.setTextColor(0xFFCC3B33);
+                body.setTextColor(getColor(R.color.danger));
                 body.setText(ans.length() > 0 ? ans.toString() + "\n（失败： " + error + "）" : "失败： " + error);
             }
-            tvStatus.setTextColor(0xFF9AA1AE);
+            tvStatus.setTextColor(getColor(R.color.text_hint));
             tvStatus.setText(batch.total + " 个引擎 · 已完成 " + batch.done + "/" + batch.total
-                    + " · " + langText());
+                    + " · " + langText() + longNote());
         }
     }
 

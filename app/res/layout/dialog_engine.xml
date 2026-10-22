@@ -40,7 +40,8 @@
         <Spinner
             android:id="@+id/spType"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:popupBackground="@drawable/bg_popup" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -53,7 +54,8 @@
         <Spinner
             android:id="@+id/spStyle"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:popupBackground="@drawable/bg_popup" />
 
         <CheckBox
             android:id="@+id/cbCustomPrompt"
@@ -106,7 +108,8 @@
         <Spinner
             android:id="@+id/spThink"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:popupBackground="@drawable/bg_popup" />
 
         <TextView
             android:layout_width="match_parent"
